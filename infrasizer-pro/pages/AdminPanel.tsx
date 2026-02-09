@@ -104,7 +104,7 @@ const defaultConfig: CalculationConfig = {
     storageMultiplier: 1.5,
   },
   metabaseServer: {
-    cpu: 2,
+    cpu: 4,
     ram: 8,
     hdd: 80,
   },
@@ -327,9 +327,14 @@ const AdminPanel: React.FC = () => {
             <div className="space-y-8">
               <div>
                 <h2 className="text-xl font-bold text-slate-900 mb-2">CRM Server Configuration</h2>
-                <p className="text-slate-600 mb-6">
+                <p className="text-slate-600 mb-4">
                   Configure thresholds and specifications for CRM server sizing.
                 </p>
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+                  <p className="text-sm text-amber-800">
+                    <strong>⚠️ Hard Minimums:</strong> All CRM servers are enforced with minimum 4 CPU cores and 12 GB RAM regardless of environment or load category.
+                  </p>
+                </div>
               </div>
 
               {/* Thresholds */}
@@ -650,9 +655,14 @@ const AdminPanel: React.FC = () => {
                     <Cpu className="w-4 h-4" />
                     Metabase Server
                   </h3>
+                  <div className="bg-blue-50 border border-blue-200 rounded p-3 mb-3">
+                    <p className="text-xs text-blue-700">
+                      <strong>Note:</strong> PROD and UAT environments use fixed sizing (4 CPU / 8 GB RAM) and ignore environment multipliers.
+                    </p>
+                  </div>
                   <div className="space-y-3">
                     <div>
-                      <label className="block text-xs text-slate-600 mb-1">CPU Cores</label>
+                      <label className="block text-xs text-slate-600 mb-1">CPU Cores (Base/DEV)</label>
                       <input
                         type="number"
                         value={config.metabaseServer.cpu}
@@ -661,12 +671,13 @@ const AdminPanel: React.FC = () => {
                       />
                     </div>
                     <div>
-                      <label className="block text-xs text-slate-600 mb-1">RAM (GB)</label>
+                      <label className="block text-xs text-slate-600 mb-1">RAM (GB) - Fixed at 8 GB</label>
                       <input
                         type="number"
                         value={config.metabaseServer.ram}
                         onChange={(e) => updateConfig(['metabaseServer', 'ram'], parseInt(e.target.value))}
                         className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                        disabled
                       />
                     </div>
                     <div>

@@ -43,6 +43,14 @@ const Dashboard: React.FC<DashboardProps> = ({ onAdminClick }) => {
     setResult(calcResult);
   };
 
+  const handleZoneChange = (serverId: string, newZone: 'DMZ' | 'Internal' | 'Private') => {
+    if (!result) return;
+    const updatedServers = result.servers.map(server =>
+      server.id === serverId ? { ...server, networkZone: newZone } : server
+    );
+    setResult({ ...result, servers: updatedServers });
+  };
+
   const handleCopy = () => {
     if (!result) return;
     const text = result.servers.map(s => `${s.name}\n${s.cpu} | ${s.ram} | ${s.hdd}`).join('\n\n');
@@ -155,7 +163,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onAdminClick }) => {
 
           <SummaryDashboard result={result} />
           
-          <InfraTable servers={result?.servers || []} />
+          <InfraTable servers={result?.servers || []} onZoneChange={handleZoneChange} />
 
           {result && (
             <div className="bg-blue-50 border-l-4 border-blue-500 p-6 rounded-r-xl mt-8">

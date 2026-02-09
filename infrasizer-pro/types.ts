@@ -38,6 +38,12 @@ export interface ServerSpec {
   cpu: string;
   os: string;
   loadCategory: 'Low' | 'Medium' | 'High' | 'Enterprise';
+  networkZone: 'DMZ' | 'Internal' | 'Private';
+  gpu?: {
+    enabled: boolean;
+    type: string;
+    vram: string;
+  };
   additionalNotes?: string;
 }
 
