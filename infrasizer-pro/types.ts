@@ -11,6 +11,7 @@ export interface BotInputs {
   activeUsers: number;
   requestsPerMinute: number;
   avgTokensPerRequest: number;
+  ryaBotPerformance: 'average' | 'high';
 }
 
 export interface SolutionSelection {

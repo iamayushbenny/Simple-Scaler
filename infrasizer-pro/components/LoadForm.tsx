@@ -108,6 +108,17 @@ const LoadForm: React.FC<LoadFormProps> = ({ register, errors, watch }) => {
               className="w-full px-4 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none"
             />
           </div>
+          <div className="space-y-2 md:col-span-2">
+            <label className="text-sm font-medium text-slate-700">GPU Performance Level</label>
+            <select
+              {...register('bot.ryaBotPerformance')}
+              className="w-full px-4 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none bg-white cursor-pointer"
+            >
+              <option value="average">Average - NVIDIA A100 (80GB VRAM)</option>
+              <option value="high">High - NVIDIA H100 (80GB VRAM)</option>
+            </select>
+            <p className="text-xs text-slate-500 mt-1">⚡ R-Yabot always requires GPU acceleration</p>
+          </div>
         </div>
 
         <div className="mt-6 p-4 bg-slate-50 rounded-lg border border-slate-100">

@@ -161,69 +161,61 @@ export const calculateInfra = (data: AppFormData): CalculationResult => {
   }
 
   // ========================
-  // 6. RYABOT LOGIC WITH GPU-BASED SIZING
+  // 6. RYABOT GPU-BASED SIZING (ALWAYS GPU)
   // ========================
   if (data.solutions.ryaBot) {
     let loadCat: ServerSpec['loadCategory'] = 'Low';
     let cpu = config.botSpecs.low.cpu;
     let ram = config.botSpecs.low.ram;
     let hdd = config.botSpecs.low.hdd;
-    let gpuConfig: ServerSpec['gpu'] = undefined;
 
-    // Determine GPU requirements based on TPM (Tokens Per Minute) - the true AI workload metric
-    if (tpm > 1000000) {
-      // High-end GPU server (A100 class) - for very high token throughput
+    // GPU selection based on performance setting (ALWAYS GPU for Ryabot)
+    const gpuConfig: ServerSpec['gpu'] = data.bot.ryaBotPerformance === 'high'
+      ? {
+          enabled: true,
+          type: 'NVIDIA H100',
+          vram: '80GB'
+        }
+      : {
+          enabled: true,
+          type: 'NVIDIA A100',
+          vram: '80GB'
+        };
+
+    // Use BOT RPM to determine CPU/RAM sizing
+    if (botRPM > 1000) {
+      // High RPM workload
       loadCat = 'High';
       cpu = Math.max(config.botSpecs.high.cpu, 16);
       ram = Math.max(config.botSpecs.high.ram, 64);
       hdd = config.botSpecs.high.hdd;
-      gpuConfig = {
-        enabled: true,
-        type: 'NVIDIA A100',
-        vram: '80GB'
-      };
-    } else if (tpm > 100000) {
-      // Mid-tier GPU server (T4 equivalent) - for moderate AI workloads
+    } else if (botRPM > 200) {
+      // Medium RPM workload
       loadCat = 'Medium';
       cpu = Math.max(config.botSpecs.medium.cpu, 8);
       ram = Math.max(config.botSpecs.medium.ram, 32);
       hdd = config.botSpecs.medium.hdd;
-      gpuConfig = {
-        enabled: true,
-        type: 'NVIDIA T4',
-        vram: '16GB'
-      };
     } else {
-      // CPU-only server for lighter workloads
-      if (tpm > config.botThresholds.mediumToHigh) {
-        loadCat = 'High';
-        cpu = config.botSpecs.high.cpu;
-        ram = config.botSpecs.high.ram;
-        hdd = config.botSpecs.high.hdd;
-      } else if (tpm > config.botThresholds.lowToMedium) {
-        loadCat = 'Medium';
-        cpu = config.botSpecs.medium.cpu;
-        ram = config.botSpecs.medium.ram;
-        hdd = config.botSpecs.medium.hdd;
-      }
+      // Low RPM workload
+      loadCat = 'Low';
+      cpu = config.botSpecs.low.cpu;
+      ram = config.botSpecs.low.ram;
+      hdd = config.botSpecs.low.hdd;
     }
 
-    // Ryabot API Server
+    // Ryabot API Server (ALWAYS includes GPU)
     const apiServer: ServerSpec = {
       id: 'bot-server',
       name: `${data.environment} R-Yabot Server API`,
-      specification: gpuConfig ? 'GPU-Accelerated AI Server' : '',
+      specification: `GPU-Accelerated AI Server (${gpuConfig.type})`,
       cpu: `${cpu} Core Xeon Processor or equivalent`,
       ram: `${ram} GB`,
       hdd: `${hdd} GB`,
       os: OS_VARIANTS.LINUX,
       loadCategory: loadCat,
-      networkZone: 'Internal'
+      networkZone: 'Internal',
+      gpu: gpuConfig
     };
-
-    if (gpuConfig) {
-      apiServer.gpu = gpuConfig;
-    }
 
     servers.push(apiServer);
 

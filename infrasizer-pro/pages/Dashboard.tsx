@@ -32,7 +32,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onAdminClick }) => {
     defaultValues: {
       environment: 'UAT',
       crm: { namedUsers: 100, concurrencyRate: 10, triggersPerMinute: 3 },
-      bot: { activeUsers: 5, requestsPerMinute: 2, avgTokensPerRequest: 500 },
+      bot: { activeUsers: 5, requestsPerMinute: 2, avgTokensPerRequest: 500, ryaBotPerformance: 'average' },
       solutions: { crm: true, marketing: false, ryaBot: false, clickhouse: false, metabase: false },
       dataVolumeGB: 50
     }
