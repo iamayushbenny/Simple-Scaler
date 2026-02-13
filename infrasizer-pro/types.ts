@@ -1,6 +1,12 @@
 
 export type Environment = 'DEV' | 'UAT' | 'PROD';
 
+// --- NEW: Solution deployment type ---
+export type SolutionType = 'on-prem' | 'on-cloud' | 'saas';
+
+// --- NEW: RyaBot deployment mode ---
+export type RyabotMode = 'cloud' | 'premise';
+
 export interface CRMInputs {
   namedUsers: number;
   concurrencyRate: number; // percentage
@@ -23,11 +29,16 @@ export interface SolutionSelection {
 }
 
 export interface AppFormData {
+  clientName: string; // NEW: Client name field
   environment: Environment;
+  solutionType: SolutionType; // NEW: Solution type selector
   crm: CRMInputs;
   bot: BotInputs;
   solutions: SolutionSelection;
   dataVolumeGB: number; // for Clickhouse
+  ryabotMode: RyabotMode; // NEW: RyaBot deployment mode (cloud vs premise)
+  haEnabled: boolean; // NEW: High Availability toggle
+  drEnabled: boolean; // NEW: Disaster Recovery toggle
 }
 
 export interface ServerSpec {
@@ -48,7 +59,17 @@ export interface ServerSpec {
   additionalNotes?: string;
 }
 
+// --- NEW: Cloud cost estimate for RyaBot on-cloud mode ---
+export interface CloudCostEstimate {
+  tpm: number;
+  monthlyCostUSD: number;
+  provider: string;
+  notes: string;
+}
+
 export interface CalculationResult {
+  clientName: string; // NEW: Included in result for exports
+  solutionType: SolutionType; // NEW: Track solution type in result
   servers: ServerSpec[];
   crmMetrics: {
     triggersPerSecond: number;
@@ -58,4 +79,8 @@ export interface CalculationResult {
     requestsPerMinute: number;
     tpm: number;
   };
+  // --- NEW: Cloud cost for RyaBot when on-cloud ---
+  ryaBotCloudCost?: CloudCostEstimate;
+  // --- NEW: SaaS message when saas mode ---
+  saasMessage?: string;
 }

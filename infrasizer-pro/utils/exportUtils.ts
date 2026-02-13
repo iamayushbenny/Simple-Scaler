@@ -1,7 +1,6 @@
 
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import * as XLSX from 'xlsx';
 import { CalculationResult, ServerSpec } from '../types';
 
 export const exportToPDF = (result: CalculationResult) => {
@@ -18,10 +17,34 @@ export const exportToPDF = (result: CalculationResult) => {
   doc.text(`Generated on: ${timestamp}`, 14, 28);
   doc.text(`InfraSizer Pro Engine v1.0`, 14, 33);
 
+  // NEW: Client Name
+  if (result.clientName) {
+    doc.setFontSize(12);
+    doc.setTextColor(30, 41, 59);
+    doc.text(`Client: ${result.clientName}`, 14, 41);
+  }
+
+  // NEW: Solution Type
+  doc.setFontSize(10);
+  doc.setTextColor(80);
+  doc.text(`Deployment Model: ${result.solutionType?.toUpperCase() || 'ON-PREM'}`, 14, 47);
+
+  // NEW: SaaS early return
+  if (result.saasMessage) {
+    doc.setFontSize(12);
+    doc.setTextColor(30, 41, 59);
+    doc.text('SaaS Deployment', 14, 58);
+    doc.setFontSize(10);
+    doc.setTextColor(80);
+    doc.text(result.saasMessage, 14, 66, { maxWidth: 180 });
+    doc.save(`${result.clientName || 'Infra'}_Capacity_Planning_Report.pdf`);
+    return;
+  }
+
   // Summary of Metrics
   doc.setFontSize(12);
   doc.setTextColor(30, 41, 59);
-  doc.text('Summary of Load Metrics', 14, 45);
+  doc.text('Summary of Load Metrics', 14, 58);
 
   const metricData = [
     ['Metric', 'Calculated Value'],
@@ -32,7 +55,7 @@ export const exportToPDF = (result: CalculationResult) => {
   ];
 
   autoTable(doc, {
-    startY: 50,
+    startY: 63,
     head: [metricData[0]],
     body: metricData.slice(1),
     theme: 'striped',
@@ -42,9 +65,34 @@ export const exportToPDF = (result: CalculationResult) => {
 
   let currentY = (doc as any).lastAutoTable.finalY + 15;
 
+  // NEW: RyaBot cloud cost table
+  if (result.ryaBotCloudCost) {
+    if (currentY > 230) { doc.addPage(); currentY = 20; }
+    doc.setFontSize(12);
+    doc.setTextColor(15, 23, 42);
+    doc.setFont('helvetica', 'bold');
+    doc.text('R-Yabot Cloud Cost Estimate', 14, currentY);
+    currentY += 5;
+
+    autoTable(doc, {
+      startY: currentY,
+      head: [],
+      body: [
+        ['Provider', result.ryaBotCloudCost.provider],
+        ['TPM', result.ryaBotCloudCost.tpm.toLocaleString()],
+        ['Est. Monthly Cost', `$${result.ryaBotCloudCost.monthlyCostUSD.toLocaleString()}`],
+        ['Notes', result.ryaBotCloudCost.notes],
+      ],
+      theme: 'grid',
+      columnStyles: { 0: { fontStyle: 'bold', fillColor: [248, 250, 252], cellWidth: 50 } },
+      styles: { fontSize: 10, cellPadding: 3 },
+      margin: { left: 14, right: 14 },
+    });
+    currentY = (doc as any).lastAutoTable.finalY + 12;
+  }
+
   // Servers Details
   result.servers.forEach((server, index) => {
-    // Check if we need a new page
     if (currentY > 230) {
       doc.addPage();
       currentY = 20;
@@ -80,42 +128,52 @@ export const exportToPDF = (result: CalculationResult) => {
     currentY = (doc as any).lastAutoTable.finalY + 12;
   });
 
-  doc.save('Infra_Capacity_Planning_Report.pdf');
+  doc.save(`${result.clientName || 'Infra'}_Capacity_Planning_Report.pdf`);
 };
 
-export const exportToExcel = (servers: ServerSpec[]) => {
-  const worksheet = XLSX.utils.json_to_sheet(servers.map(s => ({
-    'Server Node': s.name,
-    'Specification': s.specification,
-    'CPU Cores': s.cpu,
-    'RAM (GB)': s.ram,
-    'Storage (GB)': s.hdd,
-    'Operating System': s.os,
-    'Load Category': s.loadCategory
-  })));
-  const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, worksheet, 'Infra Recommendations');
-  XLSX.writeFile(workbook, 'Infra_Sizing_Report.xlsx');
-};
 
-export const exportToCSV = (servers: ServerSpec[]) => {
-  const headers = ['Server Node', 'Specification', 'CPU', 'RAM', 'Storage', 'OS', 'Load Tier'];
-  const rows = servers.map(s => [
-    `"${s.name}"`,
-    `"${s.specification}"`,
-    `"${s.cpu}"`,
-    `"${s.ram}"`,
-    `"${s.hdd}"`,
-    `"${s.os}"`,
-    s.loadCategory
-  ].join(','));
-  
-  const csvContent = [headers.join(','), ...rows].join('\n');
+
+export const exportToCSV = (result: CalculationResult) => {
+  const lines: string[] = [];
+  // NEW: Client name header
+  lines.push(`Client Name,${result.clientName || ''}`);
+  lines.push(`Deployment Model,${result.solutionType || 'on-prem'}`);
+  if (result.saasMessage) {
+    lines.push(`SaaS Note,"${result.saasMessage}"`);
+  }
+  lines.push(''); // blank separator
+
+  const headers = ['Server Node', 'Specification', 'CPU', 'RAM', 'Storage', 'OS', 'Load Tier', 'Network Zone'];
+  lines.push(headers.join(','));
+
+  for (const s of result.servers) {
+    lines.push([
+      `"${s.name}"`,
+      `"${s.specification}"`,
+      `"${s.cpu}"`,
+      `"${s.ram}"`,
+      `"${s.hdd}"`,
+      `"${s.os}"`,
+      s.loadCategory,
+      s.networkZone,
+    ].join(','));
+  }
+
+  // NEW: Cloud cost
+  if (result.ryaBotCloudCost) {
+    lines.push('');
+    lines.push('RyaBot Cloud Cost Estimate');
+    lines.push(`Provider,${result.ryaBotCloudCost.provider}`);
+    lines.push(`TPM,${result.ryaBotCloudCost.tpm}`);
+    lines.push(`Monthly Cost (USD),${result.ryaBotCloudCost.monthlyCostUSD}`);
+  }
+
+  const csvContent = lines.join('\n');
   const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
   const link = document.createElement('a');
   const url = URL.createObjectURL(blob);
   link.setAttribute('href', url);
-  link.setAttribute('download', 'Infra_Sizing_Export.csv');
+  link.setAttribute('download', `${result.clientName || 'Infra'}_Sizing_Export.csv`);
   link.style.visibility = 'hidden';
   document.body.appendChild(link);
   link.click();
