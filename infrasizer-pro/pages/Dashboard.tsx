@@ -7,10 +7,11 @@ import LoadForm from '../components/LoadForm';
 import SolutionSelector from '../components/SolutionSelector';
 import InfraTable from '../components/InfraTable';
 import SummaryDashboard from '../components/SummaryDashboard';
-import { exportToPDF, exportToCSV } from '../utils/exportUtils';
+import { exportToPDF } from '../utils/exportUtils';
+import { exportSizingWorkbook } from '../services/exportWorkbook';
 import { 
   Download, 
-  FileJson, 
+  FileSpreadsheet,
   LayoutDashboard, 
   Clipboard, 
   RefreshCcw,
@@ -48,9 +49,12 @@ const Dashboard: React.FC<DashboardProps> = ({ onAdminClick }) => {
   const drEnabled = watch('drEnabled');
   const solutionType = watch('solutionType');
 
+  const [lastFormData, setLastFormData] = useState<AppFormData | null>(null);
+
   const onSubmit = (data: AppFormData) => {
     const calcResult = calculateInfra(data);
     setResult(calcResult);
+    setLastFormData(data);
   };
 
   const handleZoneChange = (serverId: string, newZone: 'DMZ' | 'Internal' | 'Private') => {
@@ -209,12 +213,13 @@ const Dashboard: React.FC<DashboardProps> = ({ onAdminClick }) => {
                 </button>
 
                 <button 
-                  onClick={() => exportToCSV(result)}
-                  className="p-2 bg-slate-100 hover:bg-orange-50 text-slate-600 hover:text-orange-600 rounded-lg transition-colors group relative"
-                  title="Export CSV"
+                  onClick={() => lastFormData && exportSizingWorkbook({ formData: lastFormData, result })}
+                  className="p-2 bg-slate-100 hover:bg-emerald-50 text-slate-600 hover:text-emerald-600 rounded-lg transition-colors group relative"
+                  title="Export Sizing Report (.xlsx)"
+                  disabled={!lastFormData}
                 >
-                  <FileJson className="w-5 h-5" />
-                  <span className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-[10px] py-1 px-2 rounded opacity-0 group-hover:opacity-100 transition-opacity">CSV</span>
+                  <FileSpreadsheet className="w-5 h-5" />
+                  <span className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-[10px] py-1 px-2 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">Excel Report</span>
                 </button>
                 <div className="w-px h-6 bg-slate-200 mx-2 self-center"></div>
                 <button 
