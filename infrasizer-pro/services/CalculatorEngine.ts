@@ -11,13 +11,13 @@ const loadConfig = () => {
   return {
     envMultipliers: ENV_MULTIPLIERS,
     crmThresholds: {
-      lowToMedium: { triggersPerSec: 5, namedUsers: 200 },
-      mediumToHigh: { triggersPerSec: 20, namedUsers: 1000 },
+      lowToMedium: { triggersPerSec: 10, namedUsers: 300 },
+      mediumToHigh: { triggersPerSec: 100, namedUsers: 3000 },
     },
     crmSpecs: {
-      low: { cpu: 2, ram: 8, hdd: 200 },
-      medium: { cpu: 4, ram: 16, hdd: 300 },
-      high: { cpu: 8, ram: 32, hdd: 500 },
+      low: { cpu: 4, ram: 16, hdd: 100 },
+      medium: { cpu: 8, ram: 32, hdd: 200 },
+      high: { cpu: 16, ram: 64, hdd: 200 },
     },
     botThresholds: {
       lowToMedium: 5000,
@@ -154,14 +154,14 @@ export const calculateInfra = (data: AppFormData): CalculationResult => {
     let ram = config.crmSpecs.low.ram;
     let hdd = config.crmSpecs.low.hdd;
 
-    if (crmTriggersPerSec > config.crmThresholds.mediumToHigh.triggersPerSec || 
-        data.crm.namedUsers > config.crmThresholds.mediumToHigh.namedUsers) {
+    if (crmTriggersPerSec > config.crmThresholds.mediumToHigh.triggersPerSec ||
+      data.crm.namedUsers > config.crmThresholds.mediumToHigh.namedUsers) {
       loadCat = 'High';
       cpu = config.crmSpecs.high.cpu;
       ram = config.crmSpecs.high.ram;
       hdd = config.crmSpecs.high.hdd;
-    } else if (crmTriggersPerSec > config.crmThresholds.lowToMedium.triggersPerSec || 
-               data.crm.namedUsers > config.crmThresholds.lowToMedium.namedUsers) {
+    } else if (crmTriggersPerSec > config.crmThresholds.lowToMedium.triggersPerSec ||
+      data.crm.namedUsers > config.crmThresholds.lowToMedium.namedUsers) {
       loadCat = 'Medium';
       cpu = config.crmSpecs.medium.cpu;
       ram = config.crmSpecs.medium.ram;
@@ -172,17 +172,18 @@ export const calculateInfra = (data: AppFormData): CalculationResult => {
     let finalCpu = Math.ceil(cpu * envMult);
     let finalRam = Math.ceil(ram * envMult);
     let finalHdd = Math.ceil(hdd * envMult);
+    finalHdd = Math.max(finalHdd, Math.ceil(data.dataVolumeGB * 1.2));
 
     // HARD MINIMUM for CRM: 4 CPU, 12 GB RAM
     finalCpu = Math.max(4, finalCpu);
-    finalRam = Math.max(12, finalRam);
+    finalRam = Math.max(16, finalRam);
 
     // If consolidating with Metabase, increase RAM minimum to 16 GB
     if (shouldConsolidateCrmMetabase) {
       finalRam = Math.max(16, finalRam);
     }
 
-    const serverName = shouldConsolidateCrmMetabase 
+    const serverName = shouldConsolidateCrmMetabase
       ? `${data.environment} CRM + DB + Metabase (Combined)`
       : `${data.environment} APP+DB Server (CRM)`;
 
@@ -326,16 +327,21 @@ export const calculateInfra = (data: AppFormData): CalculationResult => {
       let controlHdd = config.botSpecs.low.hdd;
       let loadCat: ServerSpec['loadCategory'] = 'Low';
 
-      if (botRPM > 1000) {
+      if (tpm > 5000) {
         loadCat = 'High';
         controlCpu = Math.max(config.botSpecs.high.cpu, 8);
         controlRam = Math.max(config.botSpecs.high.ram, 32);
         controlHdd = config.botSpecs.high.hdd;
       } else if (botRPM > 200) {
         loadCat = 'Medium';
-        controlCpu = Math.max(config.botSpecs.medium.cpu, 6);
+        controlCpu = Math.max(config.botSpecs.medium.cpu, 8);
         controlRam = Math.max(config.botSpecs.medium.ram, 16);
         controlHdd = config.botSpecs.medium.hdd;
+      } else {
+        loadCat = 'Low';
+        controlCpu = config.botSpecs.low.cpu;
+        controlRam = config.botSpecs.low.ram;
+        controlHdd = config.botSpecs.low.hdd;
       }
 
       // POST-SIZING OVERRIDE: Enforce 16 GB RAM floor for RyaBot control server
@@ -361,8 +367,8 @@ export const calculateInfra = (data: AppFormData): CalculationResult => {
           ? { enabled: true, type: 'NVIDIA H100', vram: '80GB' }
           : { enabled: true, type: 'NVIDIA A100', vram: '80GB' };
 
-        const gpuCpu = botRPM > 1000 ? 16 : 8;
-        const gpuRam = botRPM > 1000 ? 64 : 32;
+        const gpuCpu = tpm > 30000 ? 16 : 8;
+        const gpuRam = tpm > 30000 ? 64 : 32;
 
         servers.push({
           id: 'bot-gpu-worker',
