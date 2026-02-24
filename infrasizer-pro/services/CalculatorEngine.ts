@@ -1,13 +1,29 @@
 
 import { AppFormData, CalculationResult, ServerSpec, CloudCostEstimate } from '../types';
-import { ENV_MULTIPLIERS, OS_VARIANTS, CLICKHOUSE_SCALE_SPECS, RYABOT_CLOUD_COST } from '../constants';
+import { ENV_MULTIPLIERS, OS_VARIANTS, CLICKHOUSE_SCALE_SPECS, RYABOT_CLOUD_COST, ROCKETCHAT_SCALE_SPECS } from '../constants';
+import { getConfig } from './configLoader';
 
-// Load configuration from localStorage or use defaults
+// Round up to the next power of 2 (minimum 4)
+function nextPowerOf2(n: number): number {
+  const min = 4;
+  let v = Math.max(min, Math.ceil(n));
+  // If already a power of 2, return as-is
+  if ((v & (v - 1)) === 0) return v;
+  // Round up to next power of 2
+  v--;
+  v |= v >> 1;
+  v |= v >> 2;
+  v |= v >> 4;
+  v |= v >> 8;
+  v |= v >> 16;
+  v++;
+  return v;
+}
+
+// Load configuration: remote cache → localStorage → defaults
 const loadConfig = () => {
-  const savedConfig = localStorage.getItem('calculationConfig');
-  if (savedConfig) {
-    return JSON.parse(savedConfig);
-  }
+  const remoteConfig = getConfig();
+  if (remoteConfig) return remoteConfig;
   return {
     envMultipliers: ENV_MULTIPLIERS,
     crmThresholds: {
@@ -43,12 +59,12 @@ const loadConfig = () => {
 function applyHALayer(servers: ServerSpec[]): ServerSpec[] {
   const result: ServerSpec[] = [];
   for (const server of servers) {
-    // HA applies ONLY to APP and Database servers — NOT to RyaBot, ClickHouse, Metabase, GPU workers
-    const isExcluded = /ryabot|r-yabot|clickhouse|metabase|analytics|gpu.*worker/i.test(server.name);
+    // HA applies ONLY to CRM APP and Database servers — NOT marketing, RyaBot, ClickHouse, Metabase, GPU workers
+    const isExcluded = /ryabot|r-yabot|clickhouse|metabase|analytics|gpu.*worker|marketing|mkt/i.test(server.name);
     const isAppOrDb = /app|db|database|crm/i.test(server.name) && !/talend|etl|frontend/i.test(server.name);
     if (!isExcluded && isAppOrDb) {
-      result.push({ ...server, id: `${server.id}-1`, name: `${server.name} (Node-1)` });
-      result.push({ ...server, id: `${server.id}-2`, name: `${server.name} (Node-2)` });
+      result.push({ ...server, id: `${server.id}-1`, name: `${server.name} 1` });
+      result.push({ ...server, id: `${server.id}-2`, name: `${server.name} 2` });
     } else {
       result.push(server);
     }
@@ -65,7 +81,7 @@ function applyDRLayer(servers: ServerSpec[]): ServerSpec[] {
     ...server,
     id: `${server.id}-dr`,
     name: `${server.name} -DR`,
-    networkZone: 'Private' as const,
+    networkZone: 'Internal' as const,
   }));
   return [...servers, ...drServers];
 }
@@ -75,7 +91,6 @@ function applyDRLayer(servers: ServerSpec[]): ServerSpec[] {
 // Ensures no consolidated APP+DB in PROD
 // ============================
 function enforceProductionSplit(servers: ServerSpec[], env: string): ServerSpec[] {
-  if (env !== 'PROD') return servers;
   const result: ServerSpec[] = [];
   for (const server of servers) {
     // Only split CRM consolidated servers — NOT analytics combined servers
@@ -85,7 +100,7 @@ function enforceProductionSplit(servers: ServerSpec[], env: string): ServerSpec[
       result.push({
         ...server,
         id: `${server.id}-app`,
-        name: `${env} APP Server (CRM)`,
+        name: `${env} CRM APP Server`,
         specification: 'Application Server',
       });
       result.push({
@@ -106,16 +121,23 @@ export const calculateInfra = (data: AppFormData): CalculationResult => {
   if (data.solutionType === 'saas') {
     const crmActiveUsers = (data.crm.namedUsers * data.crm.concurrencyRate) / 100;
     const crmTriggersPerSec = (crmActiveUsers * data.crm.triggersPerMinute) / 60;
+    const mktActiveUsers = (data.marketing.namedUsers * data.marketing.concurrencyRate) / 100;
+    const mktTriggersPerSec = (mktActiveUsers * data.marketing.triggersPerMinute) / 60;
     const botRPM = data.bot.activeUsers * data.bot.requestsPerMinute;
     const tpm = botRPM * data.bot.avgTokensPerRequest;
 
     return {
       clientName: data.clientName,
+      industry: data.industry,
       solutionType: data.solutionType,
       servers: [],
       crmMetrics: {
         triggersPerSecond: Number(crmTriggersPerSec.toFixed(2)),
         activeLoadUsers: Math.ceil(crmActiveUsers),
+      },
+      marketingMetrics: {
+        triggersPerSecond: Number(mktTriggersPerSec.toFixed(2)),
+        activeLoadUsers: Math.ceil(mktActiveUsers),
       },
       botMetrics: { requestsPerMinute: botRPM, tpm },
       saasMessage:
@@ -135,15 +157,13 @@ export const calculateInfra = (data: AppFormData): CalculationResult => {
   const crmActiveUsers = (data.crm.namedUsers * data.crm.concurrencyRate) / 100;
   const crmTriggersPerSec = (crmActiveUsers * data.crm.triggersPerMinute) / 60;
 
+  // Marketing Calculations
+  const mktActiveUsers = (data.marketing.namedUsers * data.marketing.concurrencyRate) / 100;
+  const mktTriggersPerSec = (mktActiveUsers * data.marketing.triggersPerMinute) / 60;
+
   // Bot Calculations
   const botRPM = data.bot.activeUsers * data.bot.requestsPerMinute;
   const tpm = botRPM * data.bot.avgTokensPerRequest;
-
-  // ========================
-  // 5. DEV/UAT CONSOLIDATION
-  // ========================
-  // If DEV/UAT AND both CRM + Metabase are enabled, combine them into one server
-  const shouldConsolidateCrmMetabase = isDevOrUat && data.solutions.crm && data.solutions.metabase;
 
   // ========================
   // 1. CRM SERVER LOGIC WITH MINIMUM SIZES
@@ -169,28 +189,19 @@ export const calculateInfra = (data: AppFormData): CalculationResult => {
     }
 
     // Apply environment multiplier then enforce minimums
-    let finalCpu = Math.ceil(cpu * envMult);
+    let finalCpu = nextPowerOf2(Math.ceil(cpu * envMult));
     let finalRam = Math.ceil(ram * envMult);
     let finalHdd = Math.ceil(hdd * envMult);
     finalHdd = Math.max(finalHdd, Math.ceil(data.dataVolumeGB * 1.2));
 
-    // HARD MINIMUM for CRM: 4 CPU, 12 GB RAM
-    finalCpu = Math.max(4, finalCpu);
+    // HARD MINIMUM for CRM: 4 CPU, 16 GB RAM
+    finalCpu = Math.max(4, nextPowerOf2(finalCpu));
     finalRam = Math.max(16, finalRam);
-
-    // If consolidating with Metabase, increase RAM minimum to 16 GB
-    if (shouldConsolidateCrmMetabase) {
-      finalRam = Math.max(16, finalRam);
-    }
-
-    const serverName = shouldConsolidateCrmMetabase
-      ? `${data.environment} CRM + DB + Metabase (Combined)`
-      : `${data.environment} APP+DB Server (CRM)`;
 
     servers.push({
       id: 'crm-server',
-      name: serverName,
-      specification: shouldConsolidateCrmMetabase ? 'Consolidated Application & Analytics Server' : '',
+      name: `${data.environment} APP+DB Server (CRM)`,
+      specification: '',
       cpu: `${finalCpu} Core Xeon Processor or equivalent`,
       ram: `${finalRam} GB`,
       hdd: `${finalHdd} GB Available`,
@@ -214,18 +225,57 @@ export const calculateInfra = (data: AppFormData): CalculationResult => {
   }
 
   // ========================
-  // 2. MARKETING SERVER LOGIC
+  // 2. MARKETING SERVER LOGIC (same tiered sizing as CRM)
   // ========================
   if (data.solutions.marketing) {
+    let mktLoadCat: ServerSpec['loadCategory'] = 'Low';
+    let mktCpu = config.crmSpecs.low.cpu;
+    let mktRam = config.crmSpecs.low.ram;
+    let mktHdd = config.crmSpecs.low.hdd;
+
+    if (mktTriggersPerSec > config.crmThresholds.mediumToHigh.triggersPerSec ||
+      data.marketing.namedUsers > config.crmThresholds.mediumToHigh.namedUsers) {
+      mktLoadCat = 'High';
+      mktCpu = config.crmSpecs.high.cpu;
+      mktRam = config.crmSpecs.high.ram;
+      mktHdd = config.crmSpecs.high.hdd;
+    } else if (mktTriggersPerSec > config.crmThresholds.lowToMedium.triggersPerSec ||
+      data.marketing.namedUsers > config.crmThresholds.lowToMedium.namedUsers) {
+      mktLoadCat = 'Medium';
+      mktCpu = config.crmSpecs.medium.cpu;
+      mktRam = config.crmSpecs.medium.ram;
+      mktHdd = config.crmSpecs.medium.hdd;
+    }
+
+    let mktFinalCpu = nextPowerOf2(Math.ceil(mktCpu * envMult));
+    let mktFinalRam = Math.ceil(mktRam * envMult);
+    let mktFinalHdd = Math.ceil(mktHdd * envMult);
+
+    // HARD MINIMUM for Marketing: 4 CPU, 12 GB RAM
+    mktFinalCpu = Math.max(4, nextPowerOf2(mktFinalCpu));
+    mktFinalRam = Math.max(12, mktFinalRam);
+
     servers.push({
-      id: 'mkt-server',
-      name: `${data.environment} Web Server + Marketing APP + DB`,
-      specification: 'Web Server',
-      cpu: `${Math.ceil(config.marketingServer.cpu * envMult)} Core Xeon Processor or equivalent`,
-      ram: `${Math.ceil(config.marketingServer.ram * envMult)} GB`,
-      hdd: `${config.marketingServer.hdd} GB Available`,
+      id: 'mkt-app-server',
+      name: `${data.environment} Marketing APP Server`,
+      specification: 'Marketing Application Server',
+      cpu: `${mktFinalCpu} Core Xeon Processor or equivalent`,
+      ram: `${mktFinalRam} GB`,
+      hdd: `${mktFinalHdd} GB Available`,
       os: OS_VARIANTS.LINUX,
-      loadCategory: 'Medium',
+      loadCategory: mktLoadCat,
+      networkZone: 'Internal'
+    });
+
+    servers.push({
+      id: 'mkt-db-server',
+      name: `${data.environment} Marketing DB Server`,
+      specification: 'Marketing Database Server',
+      cpu: `${mktFinalCpu} Core Xeon Processor or equivalent`,
+      ram: `${mktFinalRam} GB`,
+      hdd: `${mktFinalHdd} GB Available`,
+      os: OS_VARIANTS.LINUX,
+      loadCategory: mktLoadCat,
       networkZone: 'Internal'
     });
   }
@@ -273,9 +323,8 @@ export const calculateInfra = (data: AppFormData): CalculationResult => {
     });
 
     // Separate Metabase server (as-is)
-    if (!shouldConsolidateCrmMetabase) {
-      servers.push({
-        id: 'metabase-server',
+    servers.push({
+      id: 'metabase-server',
         name: `${data.environment} Metabase Visualization`,
         specification: 'Reporting Engine',
         cpu: '4 Core Xeon Processor or equivalent',
@@ -285,7 +334,6 @@ export const calculateInfra = (data: AppFormData): CalculationResult => {
         loadCategory: 'Low',
         networkZone: 'Internal'
       });
-    }
   }
 
   // ========================
@@ -306,13 +354,13 @@ export const calculateInfra = (data: AppFormData): CalculationResult => {
         notes: `Estimated based on ${tpm.toLocaleString()} TPM continuous usage. Actual cost depends on provider pricing.`,
       };
 
-      // Lightweight API proxy server (no GPU)
+      // Lightweight API server (no GPU)
       servers.push({
         id: 'bot-server',
-        name: `${data.environment} R-Yabot API Proxy (Cloud)`,
-        specification: 'Cloud API Proxy — No GPU required',
+        name: `${data.environment} R-YaBot API Server (Cloud)`,
+        specification: 'Cloud API Server — No GPU required',
         cpu: `4 Core Xeon Processor or equivalent`,
-        ram: `8 GB`,
+        ram: `16 GB`,
         hdd: `50 GB`,
         os: OS_VARIANTS.LINUX,
         loadCategory: 'Low',
@@ -349,9 +397,9 @@ export const calculateInfra = (data: AppFormData): CalculationResult => {
 
       servers.push({
         id: 'bot-server',
-        name: `${data.environment} R-Yabot Control Server`,
-        specification: 'RyaBot Application Server (CPU/RAM — no GPU)',
-        cpu: `${controlCpu} Core Xeon Processor or equivalent`,
+        name: `${data.environment} R-YaBot Control Server`,
+        specification: 'R-YaBot Application Server (CPU/RAM — no GPU)',
+        cpu: `${nextPowerOf2(controlCpu)} Core Xeon Processor or equivalent`,
         ram: `${controlRam} GB`,
         hdd: `${controlHdd} GB`,
         os: OS_VARIANTS.LINUX,
@@ -372,9 +420,9 @@ export const calculateInfra = (data: AppFormData): CalculationResult => {
 
         servers.push({
           id: 'bot-gpu-worker',
-          name: `${data.environment} R-Yabot GPU Worker`,
+          name: `${data.environment} R-YaBot GPU Worker`,
           specification: `GPU-Accelerated AI Worker (${gpuConfig.type})`,
-          cpu: `${gpuCpu} Core Xeon Processor or equivalent`,
+          cpu: `${nextPowerOf2(gpuCpu)} Core Xeon Processor or equivalent`,
           ram: `${gpuRam} GB`,
           hdd: `100 GB`,
           os: OS_VARIANTS.LINUX,
@@ -389,7 +437,7 @@ export const calculateInfra = (data: AppFormData): CalculationResult => {
     if (!data.solutions.crm) {
       servers.push({
         id: 'bot-frontend',
-        name: `${data.environment} R-Yabot Frontend`,
+        name: `${data.environment} R-YaBot Frontend`,
         specification: 'Web Application Hosting',
         cpu: `2 Core Xeon Processor or equivalent`,
         ram: `4 GB`,
@@ -401,30 +449,84 @@ export const calculateInfra = (data: AppFormData): CalculationResult => {
     }
   }
 
+  // ========================
+  // BFSI FORWARD SERVER — single shared server for Marketing + RyaBot
+  // Only when industry is BFSI and at least one of Marketing or RyaBot is enabled
+  // ========================
+  if (data.industry === 'BFSI' && (data.solutions.marketing || data.solutions.ryaBot)) {
+    servers.push({
+      id: 'forward-server',
+      name: `${data.environment} Forward Server`,
+      specification: 'Forward / Proxy Server (BFSI)',
+      cpu: '2 Core Xeon Processor or equivalent',
+      ram: '4 GB',
+      hdd: '50 GB',
+      os: OS_VARIANTS.LINUX,
+      loadCategory: 'Low',
+      networkZone: 'DMZ',
+    });
+  }
+
+  // ========================
+  // ROCKET.CHAT SERVER
+  // <= 50 concurrent users: 4 CPU / 16 GB RAM
+  // > 50 concurrent users: 8 CPU / 24 GB RAM
+  // ========================
+  if (data.solutions.rocketChat) {
+    const concurrentUsersForRC = Math.ceil(crmActiveUsers);
+    const useHighSpec = concurrentUsersForRC > ROCKETCHAT_SCALE_SPECS.userThreshold;
+    const rcCpu = useHighSpec ? ROCKETCHAT_SCALE_SPECS.large.cpu : ROCKETCHAT_SCALE_SPECS.standard.cpu;
+    const rcRam = useHighSpec ? ROCKETCHAT_SCALE_SPECS.large.ram : ROCKETCHAT_SCALE_SPECS.standard.ram;
+
+    servers.push({
+      id: 'rocketchat-server',
+      name: `${data.environment} Rocket.Chat Server`,
+      specification: useHighSpec ? 'High-Scale Messaging Server' : 'Standard Messaging Server',
+      cpu: `${rcCpu} Core Xeon Processor or equivalent`,
+      ram: `${rcRam} GB`,
+      hdd: '100 GB Available',
+      os: OS_VARIANTS.LINUX,
+      loadCategory: useHighSpec ? 'Medium' : 'Low',
+      networkZone: 'Internal',
+    });
+  }
+
   // ============================
   // POST-PROCESSING PIPELINE
   // ============================
 
-  // Rule 9: PROD must split APP+DB
+  // Rule 9: Always split APP+DB into separate servers
   let finalServers = enforceProductionSplit(servers, data.environment);
 
-  // Rule 5: HA duplication
+  // Rule 5: HA duplication — PROD always, UAT only if concurrent users > 100, DEV never
   if (data.haEnabled) {
-    finalServers = applyHALayer(finalServers);
+    const concurrentUsers = Math.ceil(crmActiveUsers);
+    if (isProd || (isUat && concurrentUsers > 100)) {
+      finalServers = applyHALayer(finalServers);
+    }
   }
 
-  // Rule 5: DR duplication
-  if (data.drEnabled) {
-    finalServers = applyDRLayer(finalServers);
-  }
+  // Rule 5: DR — column-only indicator (no server duplication)
+  // DR is shown as a 'Yes' column on PROD sheets only; UAT/DEV have no DR.
+
+  // Assign global sequential node numbers
+  finalServers = finalServers.map((server, idx) => ({
+    ...server,
+    name: `${server.name} (Node ${idx + 1})`,
+  }));
 
   return {
     clientName: data.clientName,
+    industry: data.industry,
     solutionType: data.solutionType,
     servers: finalServers,
     crmMetrics: {
       triggersPerSecond: Number(crmTriggersPerSec.toFixed(2)),
       activeLoadUsers: Math.ceil(crmActiveUsers)
+    },
+    marketingMetrics: {
+      triggersPerSecond: Number(mktTriggersPerSec.toFixed(2)),
+      activeLoadUsers: Math.ceil(mktActiveUsers)
     },
     botMetrics: {
       requestsPerMinute: botRPM,

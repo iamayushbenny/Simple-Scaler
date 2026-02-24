@@ -29,7 +29,14 @@ const SummaryDashboard: React.FC<SummaryDashboardProps> = ({ result }) => {
             <p className="text-xs font-medium text-slate-500 uppercase tracking-tight">Client</p>
             <p className="text-lg font-bold text-slate-900">{result.clientName}</p>
           </div>
-          <div className="ml-auto">
+          <div className="ml-auto flex items-center gap-2">
+            {result.industry && (
+              <span className={`text-xs font-semibold px-3 py-1 rounded-full ${
+                result.industry === 'BFSI' ? 'bg-amber-100 text-amber-700' : 'bg-teal-100 text-teal-700'
+              }`}>
+                {result.industry}
+              </span>
+            )}
             <span className={`text-xs font-semibold px-3 py-1 rounded-full ${
               result.solutionType === 'saas' ? 'bg-blue-100 text-blue-700' :
               result.solutionType === 'on-cloud' ? 'bg-purple-100 text-purple-700' :

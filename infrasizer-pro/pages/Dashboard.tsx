@@ -33,11 +33,13 @@ const Dashboard: React.FC<DashboardProps> = ({ onAdminClick }) => {
   const { register, handleSubmit, watch, setValue, formState: { errors } } = useForm<AppFormData>({
     defaultValues: {
       clientName: '',
+      industry: 'BFSI',
       environment: 'PROD', // Rule 1: Default to PRODUCTION
       solutionType: 'on-prem',
       crm: { namedUsers: 100, concurrencyRate: 10, triggersPerMinute: 3 },
+      marketing: { namedUsers: 100, concurrencyRate: 10, triggersPerMinute: 3 },
       bot: { activeUsers: 5, requestsPerMinute: 2, avgTokensPerRequest: 500, ryaBotPerformance: 'average' },
-      solutions: { crm: true, marketing: false, ryaBot: false, clickhouse: true, metabase: true },
+      solutions: { crm: true, marketing: false, ryaBot: false, clickhouse: true, metabase: true, rocketChat: false },
       dataVolumeGB: 50,
       ryabotMode: 'premise',
       haEnabled: true,
@@ -57,7 +59,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onAdminClick }) => {
     setLastFormData(data);
   };
 
-  const handleZoneChange = (serverId: string, newZone: 'DMZ' | 'Internal' | 'Private') => {
+  const handleZoneChange = (serverId: string, newZone: 'DMZ' | 'Internal') => {
     if (!result) return;
     const updatedServers = result.servers.map(server =>
       server.id === serverId ? { ...server, networkZone: newZone } : server
@@ -75,7 +77,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onAdminClick }) => {
     } else {
       result.servers.forEach(s => lines.push(`${s.name}\n${s.cpu} | ${s.ram} | ${s.hdd}`));
       if (result.ryaBotCloudCost) {
-        lines.push(`\nRyaBot Cloud: $${result.ryaBotCloudCost.monthlyCostUSD}/mo (${result.ryaBotCloudCost.tpm.toLocaleString()} TPM)`);
+        lines.push(`\nR-YaBot Cloud: $${result.ryaBotCloudCost.monthlyCostUSD}/mo (${result.ryaBotCloudCost.tpm.toLocaleString()} TPM)`);
       }
     }
     navigator.clipboard.writeText(lines.join('\n\n'));
@@ -109,14 +111,10 @@ const Dashboard: React.FC<DashboardProps> = ({ onAdminClick }) => {
               <Shield className="w-4 h-4" />
               Admin
             </button>
-            <select 
-              {...register('environment')}
-              className="bg-slate-100 border-none text-slate-700 text-sm font-semibold py-2 px-4 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
-            >
-              <option value="DEV">DEVELOPMENT (0.8x)</option>
-              <option value="UAT">UAT / STAGING (1.0x)</option>
-              <option value="PROD">PRODUCTION (1.5x)</option>
-            </select>
+            <span className="bg-emerald-100 text-emerald-700 text-sm font-semibold py-2 px-4 rounded-lg">
+              PRODUCTION (1.5x)
+            </span>
+            <input type="hidden" {...register('environment')} />
             <button 
               onClick={handleSubmit(onSubmit)}
               className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-semibold flex items-center gap-2 transition-all shadow-lg shadow-blue-200 active:scale-95"
@@ -147,6 +145,16 @@ const Dashboard: React.FC<DashboardProps> = ({ onAdminClick }) => {
               {errors.clientName && (
                 <p className="text-xs text-red-500 font-medium">{errors.clientName.message}</p>
               )}
+            </div>
+            <div className="space-y-1 mt-3">
+              <label className="text-xs font-medium text-slate-700">Industry <span className="text-red-500">*</span></label>
+              <select
+                {...register('industry')}
+                className="w-full px-4 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all outline-none bg-white cursor-pointer"
+              >
+                <option value="BFSI">BFSI</option>
+                <option value="Non BFSI/Healthcare">Non BFSI/Healthcare</option>
+              </select>
             </div>
           </div>
 
@@ -179,15 +187,15 @@ const Dashboard: React.FC<DashboardProps> = ({ onAdminClick }) => {
                 />
                 <div>
                   <p className="text-sm font-medium text-slate-800">Disaster Recovery (DR)</p>
-                  <p className="text-xs text-slate-500">Duplicate entire stack to a DR zone with -DR suffix</p>
+                  <p className="text-xs text-slate-500">Mark all PROD servers as DR-enabled (column indicator)</p>
                 </div>
               </label>
             </div>
             {(haEnabled || drEnabled) && (
               <div className="mt-3 p-2 bg-amber-50 rounded-lg border border-amber-100 text-xs text-amber-700 font-medium">
-                {haEnabled && drEnabled ? 'HA + DR: Servers will be duplicated for both availability and disaster recovery.'
+                {haEnabled && drEnabled ? 'HA + DR: APP/DB nodes duplicated for HA; all PROD servers marked DR-enabled.'
                   : haEnabled ? 'HA: APP and DB nodes will be duplicated (Node-1, Node-2).'
-                  : 'DR: Entire stack will be mirrored to a DR zone.'}
+                  : 'DR: All PROD servers will be marked as DR-enabled.'}
               </div>
             )}
           </div>
@@ -242,6 +250,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onAdminClick }) => {
             onZoneChange={handleZoneChange}
             saasMessage={result?.saasMessage}
             ryaBotCloudCost={result?.ryaBotCloudCost}
+            drMessage={result?.drMessage}
           />
 
           {result && !result.saasMessage && (

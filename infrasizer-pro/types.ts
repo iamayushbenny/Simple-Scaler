@@ -7,7 +7,15 @@ export type SolutionType = 'on-prem' | 'on-cloud' | 'saas';
 // --- NEW: RyaBot deployment mode ---
 export type RyabotMode = 'cloud' | 'premise';
 
+export type Industry = 'BFSI' | 'Non BFSI/Healthcare';
+
 export interface CRMInputs {
+  namedUsers: number;
+  concurrencyRate: number; // percentage
+  triggersPerMinute: number;
+}
+
+export interface MarketingInputs {
   namedUsers: number;
   concurrencyRate: number; // percentage
   triggersPerMinute: number;
@@ -26,13 +34,16 @@ export interface SolutionSelection {
   ryaBot: boolean;
   clickhouse: boolean;
   metabase: boolean;
+  rocketChat: boolean;
 }
 
 export interface AppFormData {
   clientName: string; // NEW: Client name field
+  industry: Industry; // NEW: Industry selector
   environment: Environment;
   solutionType: SolutionType; // NEW: Solution type selector
   crm: CRMInputs;
+  marketing: MarketingInputs;
   bot: BotInputs;
   solutions: SolutionSelection;
   dataVolumeGB: number; // for Clickhouse
@@ -50,7 +61,7 @@ export interface ServerSpec {
   cpu: string;
   os: string;
   loadCategory: 'Low' | 'Medium' | 'High' | 'Enterprise';
-  networkZone: 'DMZ' | 'Internal' | 'Private';
+  networkZone: 'DMZ' | 'Internal';
   gpu?: {
     enabled: boolean;
     type: string;
@@ -69,9 +80,14 @@ export interface CloudCostEstimate {
 
 export interface CalculationResult {
   clientName: string; // NEW: Included in result for exports
+  industry: Industry; // NEW: Industry in result for exports
   solutionType: SolutionType; // NEW: Track solution type in result
   servers: ServerSpec[];
   crmMetrics: {
+    triggersPerSecond: number;
+    activeLoadUsers: number;
+  };
+  marketingMetrics: {
     triggersPerSecond: number;
     activeLoadUsers: number;
   };
@@ -83,4 +99,6 @@ export interface CalculationResult {
   ryaBotCloudCost?: CloudCostEstimate;
   // --- NEW: SaaS message when saas mode ---
   saasMessage?: string;
+  // --- DR informational message ---
+  drMessage?: string;
 }

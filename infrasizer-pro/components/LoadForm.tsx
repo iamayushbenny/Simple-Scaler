@@ -2,7 +2,7 @@
 import React from 'react';
 import { UseFormRegister, FieldErrors, UseFormWatch } from 'react-hook-form';
 import { AppFormData } from '../types';
-import { User, Cpu, MessageSquare, Database } from 'lucide-react';
+import { User, Cpu, MessageSquare, Database, Megaphone } from 'lucide-react';
 
 interface LoadFormProps {
   register: UseFormRegister<AppFormData>;
@@ -12,18 +12,27 @@ interface LoadFormProps {
 
 const LoadForm: React.FC<LoadFormProps> = ({ register, errors, watch }) => {
   const watchCRM = watch('crm');
+  const watchMarketing = watch('marketing');
   const watchBot = watch('bot');
   const ryabotMode = watch('ryabotMode');
   const isRyabotPremise = ryabotMode === 'premise';
 
+  const crmEnabled = watch('solutions.crm');
+  const marketingEnabled = watch('solutions.marketing');
+  const ryaBotEnabled = watch('solutions.ryaBot');
+  const clickhouseEnabled = watch('solutions.clickhouse');
+
   // Live Auto-calcs for UI
   const crmActive = Math.ceil((watchCRM.namedUsers * watchCRM.concurrencyRate) / 100);
   const triggersSec = ((crmActive * watchCRM.triggersPerMinute) / 60).toFixed(2);
+  const mktActive = Math.ceil((watchMarketing.namedUsers * watchMarketing.concurrencyRate) / 100);
+  const mktTriggersSec = ((mktActive * watchMarketing.triggersPerMinute) / 60).toFixed(2);
   const tpm = watchBot.activeUsers * watchBot.requestsPerMinute * watchBot.avgTokensPerRequest;
 
   return (
     <div className="space-y-5 animate-in fade-in slide-in-from-left duration-500">
       {/* CRM Section */}
+      {crmEnabled && (
       <section className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
         <div className="flex items-center gap-2 mb-4 border-b border-slate-100 pb-3">
           <div className="bg-blue-100 p-1.5 rounded-lg">
@@ -75,14 +84,71 @@ const LoadForm: React.FC<LoadFormProps> = ({ register, errors, watch }) => {
           </div>
         </div>
       </section>
+      )}
+
+      {/* Marketing Section */}
+      {marketingEnabled && (
+      <section className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+        <div className="flex items-center gap-2 mb-4 border-b border-slate-100 pb-3">
+          <div className="bg-orange-100 p-1.5 rounded-lg">
+            <Megaphone className="w-4 h-4 text-orange-600" />
+          </div>
+          <h2 className="text-sm font-semibold text-slate-800">Marketing Load Dynamics</h2>
+        </div>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-slate-700">Named Users</label>
+            <input
+              type="number"
+              {...register('marketing.namedUsers', { valueAsNumber: true })}
+              className="w-full px-3 py-1.5 text-sm rounded-lg border border-slate-300 focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all outline-none"
+              placeholder="e.g. 500"
+            />
+          </div>
+          
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-slate-700">Concurrency Rate (%)</label>
+            <input
+              type="number"
+              {...register('marketing.concurrencyRate', { valueAsNumber: true })}
+              className="w-full px-3 py-1.5 text-sm rounded-lg border border-slate-300 focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all outline-none"
+              placeholder="e.g. 10"
+            />
+          </div>
+
+          <div className="space-y-1 md:col-span-2">
+            <label className="text-xs font-medium text-slate-700">Triggers Per Session/Minute</label>
+            <input
+              type="number"
+              {...register('marketing.triggersPerMinute', { valueAsNumber: true })}
+              className="w-full px-3 py-1.5 text-sm rounded-lg border border-slate-300 focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all outline-none"
+              placeholder="e.g. 3"
+            />
+          </div>
+        </div>
+
+        <div className="mt-4 p-3 bg-slate-50 rounded-lg grid grid-cols-2 gap-3 border border-slate-100">
+          <div>
+            <p className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Active Load Users</p>
+            <p className="text-xl font-bold text-orange-600">{mktActive || 0}</p>
+          </div>
+          <div>
+            <p className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Triggers/Second</p>
+            <p className="text-xl font-bold text-amber-600">{mktTriggersSec || '0.00'}</p>
+          </div>
+        </div>
+      </section>
+      )}
 
       {/* Bot Section */}
+      {ryaBotEnabled && (
       <section className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
         <div className="flex items-center gap-2 mb-4 border-b border-slate-100 pb-3">
           <div className="bg-purple-100 p-1.5 rounded-lg">
             <MessageSquare className="w-4 h-4 text-purple-600" />
           </div>
-          <h2 className="text-sm font-semibold text-slate-800">R-Yabot Interaction Load</h2>
+          <h2 className="text-sm font-semibold text-slate-800">R-YaBot Interaction Load</h2>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -136,8 +202,10 @@ const LoadForm: React.FC<LoadFormProps> = ({ register, errors, watch }) => {
           <p className="text-xl font-bold text-purple-600">{tpm.toLocaleString()}</p>
         </div>
       </section>
+      )}
 
       {/* Analytics Volume */}
+      {clickhouseEnabled && (
       <section className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
         <div className="flex items-center gap-2 mb-4 border-b border-slate-100 pb-3">
           <div className="bg-emerald-100 p-1.5 rounded-lg">
@@ -154,6 +222,7 @@ const LoadForm: React.FC<LoadFormProps> = ({ register, errors, watch }) => {
           />
         </div>
       </section>
+      )}
     </div>
   );
 };

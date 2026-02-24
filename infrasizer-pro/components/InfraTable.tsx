@@ -1,16 +1,17 @@
 
 import React from 'react';
 import { ServerSpec, CloudCostEstimate } from '../types';
-import { Server, Cloud, DollarSign } from 'lucide-react';
+import { Server, Cloud, DollarSign, ShieldAlert } from 'lucide-react';
 
 interface InfraTableProps {
   servers: ServerSpec[];
-  onZoneChange?: (serverId: string, newZone: 'DMZ' | 'Internal' | 'Private') => void;
+  onZoneChange?: (serverId: string, newZone: 'DMZ' | 'Internal') => void;
   saasMessage?: string;
   ryaBotCloudCost?: CloudCostEstimate;
+  drMessage?: string;
 }
 
-const InfraTable: React.FC<InfraTableProps> = ({ servers, onZoneChange, saasMessage, ryaBotCloudCost }) => {
+const InfraTable: React.FC<InfraTableProps> = ({ servers, onZoneChange, saasMessage, ryaBotCloudCost, drMessage }) => {
   // --- SaaS mode: show managed message ---
   if (saasMessage) {
     return (
@@ -35,11 +36,11 @@ const InfraTable: React.FC<InfraTableProps> = ({ servers, onZoneChange, saasMess
         <div className="bg-gradient-to-r from-purple-50 to-blue-50 rounded-lg overflow-hidden border border-purple-200 shadow-sm">
           <div className="bg-purple-100 border-b border-purple-200 px-6 py-3 flex items-center gap-2">
             <DollarSign className="w-5 h-5 text-purple-700" />
-            <h3 className="font-bold text-purple-900 text-lg tracking-tight">R-Yabot Cloud Cost Estimate</h3>
+            <h3 className="font-bold text-purple-900 text-lg tracking-tight">R-YaBot Cloud Cost Estimate</h3>
           </div>
           <div className="p-6">
             <p className="text-sm text-purple-800 leading-relaxed">
-              Cloud-based RyaBot deployment detected. The cost estimation module for on-cloud LLM infrastructure is currently under development.
+              Cloud-based R-YaBot deployment detected. The cost estimation module for on-cloud LLM infrastructure is currently under development.
               Final pricing will factor in TPM usage, provider rates, and scaling tiers. This section will be updated in a future release.
             </p>
           </div>
@@ -95,16 +96,14 @@ const InfraTable: React.FC<InfraTableProps> = ({ servers, onZoneChange, saasMess
                     <div className="flex items-center gap-2">
                       <select
                         value={server.networkZone}
-                        onChange={(e) => onZoneChange?.(server.id, e.target.value as 'DMZ' | 'Internal' | 'Private')}
+                        onChange={(e) => onZoneChange?.(server.id, e.target.value as 'DMZ' | 'Internal')}
                         className={`px-2 py-0.5 rounded text-[11px] font-semibold border-2 cursor-pointer focus:ring-2 focus:ring-blue-500 outline-none ${
                           server.networkZone === 'DMZ' ? 'bg-orange-50 text-orange-700 border-orange-200' :
-                          server.networkZone === 'Internal' ? 'bg-green-50 text-green-700 border-green-200' :
-                          'bg-purple-50 text-purple-700 border-purple-200'
+                          'bg-green-50 text-green-700 border-green-200'
                         }`}
                       >
                         <option value="DMZ">DMZ</option>
                         <option value="Internal">Internal</option>
-                        <option value="Private">Private</option>
                       </select>
                       <span className="text-[10px] text-slate-500">Change network deployment zone</span>
                     </div>
@@ -115,6 +114,17 @@ const InfraTable: React.FC<InfraTableProps> = ({ servers, onZoneChange, saasMess
           </div>
         </div>
       ))}
+
+      {/* DR informational message */}
+      {drMessage && (
+        <div className="bg-amber-50 border-l-4 border-amber-500 p-5 rounded-r-xl">
+          <div className="flex items-center gap-2 mb-1">
+            <ShieldAlert className="w-5 h-5 text-amber-700" />
+            <h4 className="font-bold text-amber-900">Disaster Recovery (DR)</h4>
+          </div>
+          <p className="text-amber-800 text-sm leading-relaxed">{drMessage}</p>
+        </div>
+      )}
     </div>
   );
 };

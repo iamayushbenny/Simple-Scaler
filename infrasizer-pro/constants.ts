@@ -13,9 +13,10 @@ export const OS_VARIANTS = {
 export const SOLUTIONS_METADATA = [
   { id: 'crm', label: 'CRM Solution', description: 'Core customer relationship management module' },
   { id: 'marketing', label: 'Marketing Automation', description: 'Campaign and lead management' },
-  { id: 'ryaBot', label: 'R-Yabot (AI Layer)', description: 'Intelligent bot with LLM integration' },
+  { id: 'ryaBot', label: 'R-YaBot (AI Layer)', description: 'Intelligent bot with LLM integration' },
   { id: 'clickhouse', label: 'Clickhouse Analytics', description: 'High-performance OLAP database' },
   { id: 'metabase', label: 'Metabase BI', description: 'Visualization and reporting layer' },
+  { id: 'rocketChat', label: 'Rocket.Chat', description: 'Team communication and messaging platform' },
 ];
 
 // --- NEW: Solution type options for deployment model ---
@@ -33,6 +34,13 @@ export const CLICKHOUSE_SCALE_SPECS = {
   standard: { cpu: 8, ram: 24 },  // users < 1000
   large: { cpu: 16, ram: 64 },     // users >= 1000
   userThreshold: 1000,
+};
+
+// --- Rocket.Chat scale-based specs ---
+export const ROCKETCHAT_SCALE_SPECS = {
+  standard: { cpu: 4, ram: 16 },   // concurrent users <= 50
+  large: { cpu: 8, ram: 24 },       // concurrent users > 50
+  userThreshold: 50,
 };
 
 // --- NEW: RyaBot cloud TPM cost model ---

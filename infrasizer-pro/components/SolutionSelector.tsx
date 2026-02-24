@@ -119,8 +119,8 @@ const SolutionSelector: React.FC<SolutionSelectorProps> = ({ register, watch, se
       {/* RyaBot Deployment Mode — shown only when RyaBot is enabled */}
       {ryaBotEnabled && (
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-          <h2 className="text-sm font-semibold text-slate-800 mb-1">R-Yabot Deployment Mode</h2>
-          <p className="text-[11px] text-slate-500 mb-3">Choose how RyaBot's AI layer will be deployed.</p>
+          <h2 className="text-sm font-semibold text-slate-800 mb-1">R-YaBot Deployment Mode</h2>
+          <p className="text-[11px] text-slate-500 mb-3">Choose how R-YaBot's AI layer will be deployed.</p>
           <div className="grid grid-cols-2 gap-2">
             <label
               className={`relative flex flex-col items-center gap-1.5 p-3 rounded-lg border-2 cursor-pointer transition-all text-center ${

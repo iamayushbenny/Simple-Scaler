@@ -71,7 +71,7 @@ export const exportToPDF = (result: CalculationResult) => {
     doc.setFontSize(12);
     doc.setTextColor(15, 23, 42);
     doc.setFont('helvetica', 'bold');
-    doc.text('R-Yabot Cloud Cost Estimate', 14, currentY);
+    doc.text('R-YaBot Cloud Cost Estimate', 14, currentY);
     currentY += 5;
 
     autoTable(doc, {

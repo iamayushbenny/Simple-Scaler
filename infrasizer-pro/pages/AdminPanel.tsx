@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAdminAuth } from '../contexts/AdminAuthContext';
+import PlatformRecommendationsEditor from '../components/PlatformRecommendationsEditor';
 import {
   Settings,
   LogOut,
@@ -13,8 +14,12 @@ import {
   Zap,
   Lock,
   Eye,
-  EyeOff
+  EyeOff,
+  Globe,
+  ArrowLeft
 } from 'lucide-react';
+
+import { saveConfig, resetConfig } from '../services/configLoader';
 
 interface CalculationConfig {
   envMultipliers: {
@@ -110,11 +115,15 @@ const defaultConfig: CalculationConfig = {
   },
 };
 
-const AdminPanel: React.FC = () => {
+interface AdminPanelProps {
+  onBack?: () => void;
+}
+
+const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
   const { logout } = useAdminAuth();
   const [config, setConfig] = useState<CalculationConfig>(defaultConfig);
   const [saved, setSaved] = useState(false);
-  const [activeTab, setActiveTab] = useState<'env' | 'crm' | 'bot' | 'servers' | 'security'>('env');
+  const [activeTab, setActiveTab] = useState<'env' | 'crm' | 'bot' | 'servers' | 'platform' | 'security'>('env');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPasswords, setShowPasswords] = useState(false);
@@ -122,7 +131,7 @@ const AdminPanel: React.FC = () => {
   const [passwordSuccess, setPasswordSuccess] = useState(false);
 
   useEffect(() => {
-    // Load saved config from localStorage
+    // Load saved config — configLoader already resolved remote → localStorage → defaults
     const savedConfig = localStorage.getItem('calculationConfig');
     if (savedConfig) {
       setConfig(JSON.parse(savedConfig));
@@ -130,7 +139,8 @@ const AdminPanel: React.FC = () => {
   }, []);
 
   const handleSave = () => {
-    localStorage.setItem('calculationConfig', JSON.stringify(config));
+    // Save to localStorage + fire remote save hook
+    saveConfig(config);
     setSaved(true);
     setTimeout(() => setSaved(false), 3000);
   };
@@ -138,7 +148,7 @@ const AdminPanel: React.FC = () => {
   const handleReset = () => {
     if (confirm('Are you sure you want to reset all settings to default values?')) {
       setConfig(defaultConfig);
-      localStorage.removeItem('calculationConfig');
+      resetConfig();
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
     }
@@ -183,6 +193,15 @@ const AdminPanel: React.FC = () => {
       <header className="bg-white border-b border-slate-200 px-6 py-4 sticky top-0 z-30 shadow-sm">
         <div className="max-w-7xl mx-auto flex justify-between items-center">
           <div className="flex items-center gap-3">
+            {onBack && (
+              <button
+                onClick={onBack}
+                className="flex items-center gap-1 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-medium transition-all text-sm"
+              >
+                <ArrowLeft className="w-4 h-4" />
+                Back
+              </button>
+            )}
             <div className="bg-blue-600 p-2 rounded-lg">
               <Shield className="w-6 h-6 text-white" />
             </div>
@@ -249,6 +268,17 @@ const AdminPanel: React.FC = () => {
             >
               <Cpu className="w-4 h-4 inline mr-2" />
               Server Specifications
+            </button>
+            <button
+              onClick={() => setActiveTab('platform')}
+              className={`px-4 py-2 rounded-lg font-medium transition-all whitespace-nowrap ${
+                activeTab === 'platform'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+              }`}
+            >
+              <Globe className="w-4 h-4 inline mr-2" />
+              Platform Recommendations
             </button>
             <button
               onClick={() => setActiveTab('security')}
@@ -440,7 +470,7 @@ const AdminPanel: React.FC = () => {
               <div>
                 <h2 className="text-xl font-bold text-slate-900 mb-2">Bot Server Configuration</h2>
                 <p className="text-slate-600 mb-6">
-                  Configure thresholds and specifications for R-Yabot server sizing based on TPM (Tokens Per Minute).
+                  Configure thresholds and specifications for R-YaBot server sizing based on TPM (Tokens Per Minute).
                 </p>
               </div>
 
@@ -693,6 +723,11 @@ const AdminPanel: React.FC = () => {
                 </div>
               </div>
             </div>
+          )}
+
+          {/* Platform Recommendations Tab */}
+          {activeTab === 'platform' && (
+            <PlatformRecommendationsEditor />
           )}
 
           {/* Security Tab */}
