@@ -19,6 +19,10 @@ import {
   savePlatformConfig,
   resetPlatformConfig,
 } from '../admin/platformRecommendationsStore';
+import {
+  savePlatformConfigRemote,
+  getRemotePlatformConfig,
+} from '../services/configLoader';
 import { Plus, Trash2, Save, RefreshCw, CheckCircle2, AlertCircle } from 'lucide-react';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -43,9 +47,10 @@ const PlatformRecommendationsEditor: React.FC = () => {
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState('');
 
-  // Load on mount
+  // Load on mount — prefer backend (in-memory cache) → localStorage → defaults
   useEffect(() => {
-    const stored = loadPlatformConfig();
+    const remote = getRemotePlatformConfig();
+    const stored = remote || loadPlatformConfig();
     if (stored) {
       setSoftware(stored.software);
       setBrowsers(stored.browsers);
@@ -95,7 +100,7 @@ const PlatformRecommendationsEditor: React.FC = () => {
 
   // ─── Save / Reset ─────────────────────────────────────────────────────
 
-  const handleSave = () => {
+  const handleSave = async () => {
     setError('');
     setSaved(false);
 
@@ -116,9 +121,21 @@ const PlatformRecommendationsEditor: React.FC = () => {
     }
 
     const payload: PlatformRecommendations = { software, browsers };
+
+    // Save to localStorage (cache / fallback)
     const ok = savePlatformConfig(payload);
     if (!ok) {
       setError('Validation failed. Ensure at least one valid software or browser row exists.');
+      return;
+    }
+
+    // Persist to backend (source of truth)
+    const remoteOk = await savePlatformConfigRemote(payload);
+    if (!remoteOk) {
+      // Saved locally but backend write failed — warn the admin
+      setError('Saved locally, but failed to sync to the server. Changes may not persist for other users.');
+      setSaved(true);
+      setTimeout(() => setSaved(false), 5000);
       return;
     }
 

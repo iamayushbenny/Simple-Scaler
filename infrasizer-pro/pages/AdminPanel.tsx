@@ -19,7 +19,7 @@ import {
   ArrowLeft
 } from 'lucide-react';
 
-import { saveConfig, resetConfig } from '../services/configLoader';
+import { saveConfig, resetConfig, getConfig } from '../services/configLoader';
 
 interface CalculationConfig {
   envMultipliers: {
@@ -123,6 +123,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
   const { logout } = useAdminAuth();
   const [config, setConfig] = useState<CalculationConfig>(defaultConfig);
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState('');
   const [activeTab, setActiveTab] = useState<'env' | 'crm' | 'bot' | 'servers' | 'platform' | 'security'>('env');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -131,24 +132,30 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
   const [passwordSuccess, setPasswordSuccess] = useState(false);
 
   useEffect(() => {
-    // Load saved config — configLoader already resolved remote → localStorage → defaults
-    const savedConfig = localStorage.getItem('calculationConfig');
+    // Load saved config — backend (in-memory cache) → localStorage → defaults
+    const savedConfig = getConfig();
     if (savedConfig) {
-      setConfig(JSON.parse(savedConfig));
+      setConfig(savedConfig);
     }
   }, []);
 
-  const handleSave = () => {
-    // Save to localStorage + fire remote save hook
-    saveConfig(config);
+  const handleSave = async () => {
+    setSaveError('');
+    // Save to localStorage + POST to backend
+    const ok = await saveConfig(config);
     setSaved(true);
-    setTimeout(() => setSaved(false), 3000);
+    if (!ok) {
+      setSaveError('Saved locally, but failed to sync to server. Other users may not see these changes.');
+    }
+    setTimeout(() => { setSaved(false); setSaveError(''); }, 4000);
   };
 
-  const handleReset = () => {
+  const handleReset = async () => {
     if (confirm('Are you sure you want to reset all settings to default values?')) {
       setConfig(defaultConfig);
       resetConfig();
+      // Also persist defaults to backend
+      await saveConfig(defaultConfig);
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
     }
@@ -807,6 +814,11 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
         </div>
 
         {/* Action Buttons */}
+        {saveError && (
+          <div className="mt-4 bg-amber-50 border border-amber-200 text-amber-800 px-4 py-3 rounded-lg text-sm">
+            ⚠️ {saveError}
+          </div>
+        )}
         <div className="flex gap-4 justify-end mt-6">
           <button
             onClick={handleReset}

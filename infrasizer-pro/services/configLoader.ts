@@ -19,6 +19,10 @@
 
 import { PlatformRecommendations } from '../config/platformRecommendations';
 
+// ─── Backend base URL ────────────────────────────────────────────────────────
+
+const API_BASE = 'http://172.22.8.6:5000';
+
 // ─── Storage keys ────────────────────────────────────────────────────────────
 
 const CALC_STORAGE_KEY = 'calculationConfig';
@@ -45,11 +49,11 @@ async function fetchJSON<T>(url: string): Promise<T | null> {
 // ─── Calculation Config ──────────────────────────────────────────────────────
 
 /**
- * Fetch /config.json and warm the in-memory + localStorage caches.
+ * Fetch calculation config from backend API and warm the in-memory + localStorage caches.
  * Safe to call multiple times — subsequent calls are near-instant.
  */
 export async function initRemoteConfig(): Promise<void> {
-  const remote = await fetchJSON<any>('/config.json');
+  const remote = await fetchJSON<any>(`${API_BASE}/api/calcconfig`);
   if (remote && typeof remote === 'object' && Object.keys(remote).length > 0) {
     _calcConfigCache = remote;
     // Mirror to localStorage so offline sessions still see latest admin config
@@ -82,21 +86,23 @@ export function getConfig(): any {
 }
 
 /**
- * Save config both to localStorage AND write to /config.json via API hook.
+ * Save config to localStorage AND persist to backend via POST /api/calcconfig.
  * Called from AdminPanel.handleSave().
  */
-export async function saveConfig(config: any): Promise<void> {
+export async function saveConfig(config: any): Promise<boolean> {
   _calcConfigCache = config;
   localStorage.setItem(CALC_STORAGE_KEY, JSON.stringify(config));
 
-  // Fire-and-forget remote save — will work if a backend endpoint exists
   try {
-    await fetch('/api/config', {
-      method: 'PUT',
+    const res = await fetch(`${API_BASE}/api/calcconfig`, {
+      method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(config),
     });
-  } catch { /* No backend yet — localStorage is still saved */ }
+    return res.ok;
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -110,10 +116,10 @@ export function resetConfig(): void {
 // ─── Platform Recommendations Config ─────────────────────────────────────────
 
 /**
- * Fetch /platformRecommendations.json into memory + localStorage.
+ * Fetch platform recommendations from backend API into memory + localStorage.
  */
 export async function initRemotePlatformConfig(): Promise<void> {
-  const remote = await fetchJSON<PlatformRecommendations>('/platformRecommendations.json');
+  const remote = await fetchJSON<PlatformRecommendations>(`${API_BASE}/api/config`);
   if (remote && typeof remote === 'object' && Array.isArray(remote.software)) {
     _platformConfigCache = remote;
     try {
@@ -141,4 +147,43 @@ export function getRemotePlatformConfig(): PlatformRecommendations | null {
     }
   } catch { /* ignore */ }
   return null;
+}
+
+/**
+ * Save platform recommendations to the backend API.
+ * Returns true on success, false on failure.
+ */
+export async function savePlatformConfigRemote(
+  data: PlatformRecommendations,
+): Promise<boolean> {
+  try {
+    const res = await fetch(`${API_BASE}/api/config`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) return false;
+    // Update in-memory cache so subsequent reads reflect the save
+    _platformConfigCache = data;
+    try {
+      localStorage.setItem(PLATFORM_STORAGE_KEY, JSON.stringify(data));
+    } catch { /* ignore */ }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Manually update the in-memory platform config cache.
+ * Useful when the admin saves and we want immediate consistency
+ * without waiting for a re-fetch.
+ */
+export function updatePlatformConfigCache(
+  data: PlatformRecommendations,
+): void {
+  _platformConfigCache = data;
+  try {
+    localStorage.setItem(PLATFORM_STORAGE_KEY, JSON.stringify(data));
+  } catch { /* ignore */ }
 }
