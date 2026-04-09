@@ -11,7 +11,7 @@ const SummaryDashboard: React.FC<SummaryDashboardProps> = ({ result }) => {
   if (!result) return null;
 
   const stats = [
-    { label: 'Active Users', value: result.crmMetrics.activeLoadUsers, icon: Users, color: 'text-blue-600', bg: 'bg-blue-50' },
+    { label: 'Concurrent Users', value: result.crmMetrics.activeLoadUsers, icon: Users, color: 'text-blue-600', bg: 'bg-blue-50' },
     { label: 'Triggers/Sec', value: result.crmMetrics.triggersPerSecond, icon: Activity, color: 'text-indigo-600', bg: 'bg-indigo-50' },
     { label: 'Bot TPM', value: result.botMetrics.tpm.toLocaleString(), icon: Zap, color: 'text-purple-600', bg: 'bg-purple-50' },
     { label: 'Nodes Required', value: result.servers.length, icon: TrendingUp, color: 'text-emerald-600', bg: 'bg-emerald-50' },

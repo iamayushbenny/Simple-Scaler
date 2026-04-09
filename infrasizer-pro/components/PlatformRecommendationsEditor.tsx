@@ -13,6 +13,9 @@ import {
   SoftwareRecommendation,
   BrowserRecommendation,
   defaultRecommendations,
+  ProductStackId,
+  ProductStackRecommendations,
+  PRODUCT_STACKS,
 } from '../config/platformRecommendations';
 import {
   loadPlatformConfig,
@@ -24,6 +27,13 @@ import {
   getRemotePlatformConfig,
 } from '../services/configLoader';
 import { Plus, Trash2, Save, RefreshCw, CheckCircle2, AlertCircle } from 'lucide-react';
+
+const STACK_EXPORT_MAPPING: Record<ProductStackId, string> = {
+  marketing: 'Exports when Marketing is selected',
+  ryabot: 'Exports when RyaBot is selected',
+  chatbot: 'Exports when Rocket.Chat is selected',
+  crm: 'Exports when CRM is selected',
+};
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -42,20 +52,55 @@ const emptyBrowserRow = (): BrowserRecommendation => ({
 // ─── Component ───────────────────────────────────────────────────────────────
 
 const PlatformRecommendationsEditor: React.FC = () => {
-  const [software, setSoftware] = useState<SoftwareRecommendation[]>([]);
+  const [productStacks, setProductStacks] = useState<ProductStackRecommendations>({
+    marketing: [],
+    ryabot: [],
+    chatbot: [],
+    crm: [],
+  });
+  const [activeStack, setActiveStack] = useState<ProductStackId>('crm');
   const [browsers, setBrowsers] = useState<BrowserRecommendation[]>([]);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState('');
+
+  const activeStackRows = productStacks[activeStack] || [];
+
+  const stackLabel = PRODUCT_STACKS.find(s => s.id === activeStack)?.label || activeStack;
 
   // Load on mount — prefer backend (in-memory cache) → localStorage → defaults
   useEffect(() => {
     const remote = getRemotePlatformConfig();
     const stored = remote || loadPlatformConfig();
     if (stored) {
-      setSoftware(stored.software);
+      const base = {
+        marketing: [...defaultRecommendations.productStacks.marketing],
+        ryabot: [...defaultRecommendations.productStacks.ryabot],
+        chatbot: [...defaultRecommendations.productStacks.chatbot],
+        crm: [...defaultRecommendations.productStacks.crm],
+      };
+
+      const incoming = stored.productStacks;
+      if (incoming && typeof incoming === 'object') {
+        setProductStacks({
+          marketing: Array.isArray(incoming.marketing) ? incoming.marketing : (Array.isArray((incoming as any).ss1) ? (incoming as any).ss1 : base.marketing),
+          ryabot: Array.isArray(incoming.ryabot) ? incoming.ryabot : (Array.isArray((incoming as any).ss2) ? (incoming as any).ss2 : base.ryabot),
+          chatbot: Array.isArray(incoming.chatbot) ? incoming.chatbot : (Array.isArray((incoming as any).ss3) ? (incoming as any).ss3 : base.chatbot),
+          crm: Array.isArray(incoming.crm) ? incoming.crm : (Array.isArray((incoming as any).ss4) ? (incoming as any).ss4 : (stored.software || base.crm)),
+        });
+      } else {
+        setProductStacks({
+          ...base,
+          crm: Array.isArray(stored.software) && stored.software.length > 0 ? stored.software : base.crm,
+        });
+      }
       setBrowsers(stored.browsers);
     } else {
-      setSoftware([...defaultRecommendations.software]);
+      setProductStacks({
+        marketing: [...defaultRecommendations.productStacks.marketing],
+        ryabot: [...defaultRecommendations.productStacks.ryabot],
+        chatbot: [...defaultRecommendations.productStacks.chatbot],
+        crm: [...defaultRecommendations.productStacks.crm],
+      });
       setBrowsers([...defaultRecommendations.browsers]);
     }
   }, []);
@@ -67,17 +112,27 @@ const PlatformRecommendationsEditor: React.FC = () => {
     field: keyof SoftwareRecommendation,
     value: string,
   ) => {
-    setSoftware(prev => {
-      const next = [...prev];
-      next[index] = { ...next[index], [field]: value };
-      return next;
+    setProductStacks(prev => {
+      const nextRows = [...(prev[activeStack] || [])];
+      nextRows[index] = { ...nextRows[index], [field]: value };
+      return {
+        ...prev,
+        [activeStack]: nextRows,
+      };
     });
   };
 
-  const addSoftwareRow = () => setSoftware(prev => [...prev, emptySoftwareRow()]);
+  const addSoftwareRow = () =>
+    setProductStacks(prev => ({
+      ...prev,
+      [activeStack]: [...(prev[activeStack] || []), emptySoftwareRow()],
+    }));
 
   const removeSoftwareRow = (index: number) =>
-    setSoftware(prev => prev.filter((_, i) => i !== index));
+    setProductStacks(prev => ({
+      ...prev,
+      [activeStack]: (prev[activeStack] || []).filter((_, i) => i !== index),
+    }));
 
   // ─── Browser table handlers ────────────────────────────────────────────
 
@@ -105,11 +160,14 @@ const PlatformRecommendationsEditor: React.FC = () => {
     setSaved(false);
 
     // Client-side validation
-    for (let i = 0; i < software.length; i++) {
-      const row = software[i];
-      if (!row.software.trim() || !row.supportedVersion.trim()) {
-        setError(`Software row ${i + 1}: Name and Version are required.`);
-        return;
+    for (const stack of PRODUCT_STACKS) {
+      const rows = productStacks[stack.id] || [];
+      for (let i = 0; i < rows.length; i++) {
+        const row = rows[i];
+        if (!row.software.trim() || !row.supportedVersion.trim()) {
+          setError(`${stack.label} - row ${i + 1}: Name and Version are required.`);
+          return;
+        }
       }
     }
     for (let i = 0; i < browsers.length; i++) {
@@ -120,7 +178,10 @@ const PlatformRecommendationsEditor: React.FC = () => {
       }
     }
 
-    const payload: PlatformRecommendations = { software, browsers };
+    const payload: PlatformRecommendations = {
+      productStacks,
+      browsers,
+    };
 
     // Save to localStorage (cache / fallback)
     const ok = savePlatformConfig(payload);
@@ -146,7 +207,13 @@ const PlatformRecommendationsEditor: React.FC = () => {
   const handleReset = () => {
     if (!confirm('Reset platform recommendations to built-in defaults? Admin changes will be deleted.')) return;
     resetPlatformConfig();
-    setSoftware([...defaultRecommendations.software]);
+    setProductStacks({
+      marketing: [...defaultRecommendations.productStacks.marketing],
+      ryabot: [...defaultRecommendations.productStacks.ryabot],
+      chatbot: [...defaultRecommendations.productStacks.chatbot],
+      crm: [...defaultRecommendations.productStacks.crm],
+    });
+    setActiveStack('crm');
     setBrowsers([...defaultRecommendations.browsers]);
     setSaved(false);
     setError('');
@@ -162,12 +229,19 @@ const PlatformRecommendationsEditor: React.FC = () => {
           Edit software and browser recommendations exported in the "Platform Recommendation" sheet.
           Changes apply to all future exports immediately.
         </p>
+        <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 text-sm text-slate-700">
+          <p className="font-semibold mb-1">How this works</p>
+          <p>Each product stack maps to product selection in the sizing form. The Excel export includes only the software rows for selected products.</p>
+        </div>
       </div>
 
       {/* ── Software Table ──────────────────────────────────────────── */}
       <div>
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-lg font-semibold text-slate-800">Software Recommendations</h3>
+          <div>
+            <h3 className="text-lg font-semibold text-slate-800">Software Recommendations</h3>
+            <p className="text-xs text-slate-500 mt-1">Maintain product-specific stacks. Export includes only stacks mapped to selected solutions.</p>
+          </div>
           <button
             onClick={addSoftwareRow}
             className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-lg transition-colors"
@@ -175,6 +249,27 @@ const PlatformRecommendationsEditor: React.FC = () => {
             <Plus className="w-4 h-4" />
             Add Row
           </button>
+        </div>
+
+        <div className="flex flex-wrap gap-2 mb-3">
+          {PRODUCT_STACKS.map(stack => (
+            <button
+              key={stack.id}
+              onClick={() => setActiveStack(stack.id)}
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                activeStack === stack.id
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+              }`}
+            >
+              {stack.label} ({(productStacks[stack.id] || []).length})
+            </button>
+          ))}
+        </div>
+
+        <div className="mb-3 p-2.5 bg-blue-50 border border-blue-200 rounded-lg text-sm">
+          <p className="font-semibold text-blue-800">{stackLabel}</p>
+          <p className="text-blue-700">{STACK_EXPORT_MAPPING[activeStack]}</p>
         </div>
 
         <div className="overflow-x-auto border border-slate-200 rounded-lg">
@@ -189,7 +284,7 @@ const PlatformRecommendationsEditor: React.FC = () => {
               </tr>
             </thead>
             <tbody>
-              {software.map((row, i) => (
+              {activeStackRows.map((row, i) => (
                 <tr key={i} className="border-b border-slate-100 hover:bg-slate-50/50">
                   <td className="px-2 py-1.5">
                     <input
@@ -238,10 +333,10 @@ const PlatformRecommendationsEditor: React.FC = () => {
                   </td>
                 </tr>
               ))}
-              {software.length === 0 && (
+              {activeStackRows.length === 0 && (
                 <tr>
                   <td colSpan={5} className="text-center py-6 text-slate-400 text-sm">
-                    No software rows. Click "Add Row" to start.
+                    No rows for {PRODUCT_STACKS.find(s => s.id === activeStack)?.label}. Click "Add Row" to start.
                   </td>
                 </tr>
               )}

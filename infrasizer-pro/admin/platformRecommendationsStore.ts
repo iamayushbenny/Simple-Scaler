@@ -12,6 +12,7 @@ import {
   PlatformRecommendations,
   SoftwareRecommendation,
   BrowserRecommendation,
+  ProductStackRecommendations,
 } from '../config/platformRecommendations';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -42,6 +43,30 @@ function validateBrowserRow(row: unknown): row is BrowserRecommendation {
   return isNonEmptyString(r.browser) && isNonEmptyString(r.supportedVersion);
 }
 
+function cleanSoftwareRows(rows: unknown[]): SoftwareRecommendation[] {
+  return rows.filter(validateSoftwareRow).map(s => ({
+    software: s.software.trim(),
+    supportedVersion: s.supportedVersion.trim(),
+    componentHosted: s.componentHosted.trim(),
+    comments: s.comments.trim(),
+  }));
+}
+
+const LEGACY_STACK_KEY_MAP: Record<keyof ProductStackRecommendations, string> = {
+  marketing: 'ss1',
+  ryabot: 'ss2',
+  chatbot: 'ss3',
+  crm: 'ss4',
+};
+
+function readStackRows(data: Record<string, unknown>, stackId: keyof ProductStackRecommendations): SoftwareRecommendation[] {
+  const stacks = data.productStacks as Record<string, unknown> | undefined;
+  if (!stacks || typeof stacks !== 'object') return [];
+  const rows = stacks[stackId] ?? stacks[LEGACY_STACK_KEY_MAP[stackId]];
+  if (!Array.isArray(rows)) return [];
+  return cleanSoftwareRows(rows);
+}
+
 /**
  * Validate a parsed object as PlatformRecommendations.
  * Returns the cleaned object or null if invalid.
@@ -52,26 +77,33 @@ export function validatePlatformRecommendations(
   if (typeof data !== 'object' || data === null) return null;
   const d = data as Record<string, unknown>;
 
-  if (!Array.isArray(d.software) || !Array.isArray(d.browsers)) return null;
+  if (!Array.isArray(d.browsers)) return null;
 
-  const software = d.software.filter(validateSoftwareRow);
+  const legacySoftware = Array.isArray(d.software) ? cleanSoftwareRows(d.software) : [];
   const browsers = d.browsers.filter(validateBrowserRow);
+  const marketing = readStackRows(d, 'marketing');
+  const ryabot = readStackRows(d, 'ryabot');
+  const chatbot = readStackRows(d, 'chatbot');
+  const crm = readStackRows(d, 'crm');
+
+  const hasStackData = marketing.length + ryabot.length + chatbot.length + crm.length > 0;
+  const productStacks: ProductStackRecommendations = hasStackData
+    ? { marketing, ryabot, chatbot, crm }
+    : { marketing: [], ryabot: [], chatbot: [], crm: legacySoftware };
+
+  const software = productStacks.crm.length > 0 ? productStacks.crm : legacySoftware;
 
   // Must have at least some valid rows to be considered a valid config
-  if (software.length === 0 && browsers.length === 0) return null;
+  if (software.length === 0 && browsers.length === 0 && !hasStackData) return null;
 
   // Trim all string fields
   return {
-    software: software.map(s => ({
-      software: s.software.trim(),
-      supportedVersion: s.supportedVersion.trim(),
-      componentHosted: s.componentHosted.trim(),
-      comments: s.comments.trim(),
-    })),
+    software,
     browsers: browsers.map(b => ({
       browser: b.browser.trim(),
       supportedVersion: b.supportedVersion.trim(),
     })),
+    productStacks,
   };
 }
 

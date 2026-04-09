@@ -20,6 +20,22 @@ function nextPowerOf2(n: number): number {
   return v;
 }
 
+export function calculateLoadMetrics(userCount: number, concurrencyPercent: number, perMinuteRate: number) {
+  const safeUserCount = Number.isFinite(userCount) ? Math.max(0, userCount) : 0;
+  const safeConcurrency = Number.isFinite(concurrencyPercent) ? Math.max(0, concurrencyPercent) : 0;
+  const safePerMinuteRate = Number.isFinite(perMinuteRate) ? Math.max(0, perMinuteRate) : 0;
+
+  const concurrentUsers = safeUserCount * (safeConcurrency / 100);
+  const perSecondRate = safePerMinuteRate / 60;
+  const activeLoadPerSecond = concurrentUsers * perSecondRate;
+
+  return {
+    perSecondRate,
+    activeLoadPerSecond,
+    concurrentUsers,
+  };
+}
+
 // Load configuration: remote cache → localStorage → defaults
 const loadConfig = () => {
   const remoteConfig = getConfig();
@@ -119,11 +135,12 @@ function enforceProductionSplit(servers: ServerSpec[], env: string): ServerSpec[
 export const calculateInfra = (data: AppFormData): CalculationResult => {
   // --- NEW: SaaS early return ---
   if (data.solutionType === 'saas') {
-    const crmActiveUsers = (data.crm.namedUsers * data.crm.concurrencyRate) / 100;
-    const crmTriggersPerSec = (crmActiveUsers * data.crm.triggersPerMinute) / 60;
-    const mktActiveUsers = (data.marketing.namedUsers * data.marketing.concurrencyRate) / 100;
-    const mktTriggersPerSec = (mktActiveUsers * data.marketing.triggersPerMinute) / 60;
-    const botRPM = data.bot.activeUsers * data.bot.requestsPerMinute;
+    const crmLoad = calculateLoadMetrics(data.crm.namedUsers, data.crm.concurrencyRate, data.crm.triggersPerMinute);
+    const mktLoad = calculateLoadMetrics(data.marketing.namedUsers, data.marketing.concurrencyRate, data.marketing.triggersPerMinute);
+    const botConcurrentUsers = data.bot.activeUsers;
+    const botRPM = botConcurrentUsers * data.bot.requestsPerMinute;
+    const botRequestsPerSecond = data.bot.requestsPerMinute / 60;
+    const botActiveLoadPerSecond = botRPM / 60;
     const tpm = botRPM * data.bot.avgTokensPerRequest;
 
     return {
@@ -132,14 +149,24 @@ export const calculateInfra = (data: AppFormData): CalculationResult => {
       solutionType: data.solutionType,
       servers: [],
       crmMetrics: {
-        triggersPerSecond: Number(crmTriggersPerSec.toFixed(2)),
-        activeLoadUsers: Math.ceil(crmActiveUsers),
+        triggersPerSecond: Number(crmLoad.perSecondRate.toFixed(2)),
+        concurrentUsers: Number(crmLoad.concurrentUsers.toFixed(2)),
+        activeLoadPerSecond: Number(crmLoad.activeLoadPerSecond.toFixed(2)),
+        activeLoadUsers: Math.ceil(crmLoad.concurrentUsers),
       },
       marketingMetrics: {
-        triggersPerSecond: Number(mktTriggersPerSec.toFixed(2)),
-        activeLoadUsers: Math.ceil(mktActiveUsers),
+        triggersPerSecond: Number(mktLoad.perSecondRate.toFixed(2)),
+        concurrentUsers: Number(mktLoad.concurrentUsers.toFixed(2)),
+        activeLoadPerSecond: Number(mktLoad.activeLoadPerSecond.toFixed(2)),
+        activeLoadUsers: Math.ceil(mktLoad.concurrentUsers),
       },
-      botMetrics: { requestsPerMinute: botRPM, tpm },
+      botMetrics: {
+        requestsPerSecond: Number(botRequestsPerSecond.toFixed(2)),
+        activeLoadPerSecond: Number(botActiveLoadPerSecond.toFixed(2)),
+        requestsPerMinute: Number(botRPM.toFixed(2)),
+        concurrentUsers: Number(botConcurrentUsers.toFixed(2)),
+        tpm,
+      },
       saasMessage:
         'Infrastructure is managed by provider. Sizing and pricing are based on number of users and pay-as-you-go usage.',
     };
@@ -153,16 +180,21 @@ export const calculateInfra = (data: AppFormData): CalculationResult => {
   const isProd = data.environment === 'PROD';
   const isDevOrUat = isDev || isUat;
 
-  // CRM Calculations
-  const crmActiveUsers = (data.crm.namedUsers * data.crm.concurrencyRate) / 100;
-  const crmTriggersPerSec = (crmActiveUsers * data.crm.triggersPerMinute) / 60;
+  // Standardized load calculations
+  const crmLoad = calculateLoadMetrics(data.crm.namedUsers, data.crm.concurrencyRate, data.crm.triggersPerMinute);
+  const crmConcurrentUsers = crmLoad.concurrentUsers;
+  const crmTriggersPerSecond = crmLoad.perSecondRate;
+  const crmActiveLoadPerSecond = crmLoad.activeLoadPerSecond;
 
-  // Marketing Calculations
-  const mktActiveUsers = (data.marketing.namedUsers * data.marketing.concurrencyRate) / 100;
-  const mktTriggersPerSec = (mktActiveUsers * data.marketing.triggersPerMinute) / 60;
+  const mktLoad = calculateLoadMetrics(data.marketing.namedUsers, data.marketing.concurrencyRate, data.marketing.triggersPerMinute);
+  const mktConcurrentUsers = mktLoad.concurrentUsers;
+  const mktTriggersPerSecond = mktLoad.perSecondRate;
+  const mktActiveLoadPerSecond = mktLoad.activeLoadPerSecond;
 
-  // Bot Calculations
-  const botRPM = data.bot.activeUsers * data.bot.requestsPerMinute;
+  const botConcurrentUsers = data.bot.activeUsers;
+  const botRPM = botConcurrentUsers * data.bot.requestsPerMinute;
+  const botRequestsPerSecond = data.bot.requestsPerMinute / 60;
+  const botActiveLoadPerSecond = botRPM / 60;
   const tpm = botRPM * data.bot.avgTokensPerRequest;
 
   // ========================
@@ -174,13 +206,13 @@ export const calculateInfra = (data: AppFormData): CalculationResult => {
     let ram = config.crmSpecs.low.ram;
     let hdd = config.crmSpecs.low.hdd;
 
-    if (crmTriggersPerSec > config.crmThresholds.mediumToHigh.triggersPerSec ||
+    if (crmActiveLoadPerSecond > config.crmThresholds.mediumToHigh.triggersPerSec ||
       data.crm.namedUsers > config.crmThresholds.mediumToHigh.namedUsers) {
       loadCat = 'High';
       cpu = config.crmSpecs.high.cpu;
       ram = config.crmSpecs.high.ram;
       hdd = config.crmSpecs.high.hdd;
-    } else if (crmTriggersPerSec > config.crmThresholds.lowToMedium.triggersPerSec ||
+    } else if (crmActiveLoadPerSecond > config.crmThresholds.lowToMedium.triggersPerSec ||
       data.crm.namedUsers > config.crmThresholds.lowToMedium.namedUsers) {
       loadCat = 'Medium';
       cpu = config.crmSpecs.medium.cpu;
@@ -233,13 +265,13 @@ export const calculateInfra = (data: AppFormData): CalculationResult => {
     let mktRam = config.crmSpecs.low.ram;
     let mktHdd = config.crmSpecs.low.hdd;
 
-    if (mktTriggersPerSec > config.crmThresholds.mediumToHigh.triggersPerSec ||
+    if (mktActiveLoadPerSecond > config.crmThresholds.mediumToHigh.triggersPerSec ||
       data.marketing.namedUsers > config.crmThresholds.mediumToHigh.namedUsers) {
       mktLoadCat = 'High';
       mktCpu = config.crmSpecs.high.cpu;
       mktRam = config.crmSpecs.high.ram;
       mktHdd = config.crmSpecs.high.hdd;
-    } else if (mktTriggersPerSec > config.crmThresholds.lowToMedium.triggersPerSec ||
+    } else if (mktActiveLoadPerSecond > config.crmThresholds.lowToMedium.triggersPerSec ||
       data.marketing.namedUsers > config.crmThresholds.lowToMedium.namedUsers) {
       mktLoadCat = 'Medium';
       mktCpu = config.crmSpecs.medium.cpu;
@@ -285,7 +317,7 @@ export const calculateInfra = (data: AppFormData): CalculationResult => {
   // < 100 concurrent → single combined server (4 CPU / 16 GB)
   // >= 100 concurrent → separate ClickHouse + Metabase servers
   // ========================
-  const concurrentUsersForAnalytics = Math.ceil(crmActiveUsers);
+  const concurrentUsersForAnalytics = Math.ceil(crmConcurrentUsers);
   const lowConcurrency = concurrentUsersForAnalytics < 100;
 
   if (lowConcurrency) {
@@ -473,7 +505,7 @@ export const calculateInfra = (data: AppFormData): CalculationResult => {
   // > 50 concurrent users: 8 CPU / 24 GB RAM
   // ========================
   if (data.solutions.rocketChat) {
-    const concurrentUsersForRC = Math.ceil(crmActiveUsers);
+    const concurrentUsersForRC = Math.ceil(crmConcurrentUsers);
     const useHighSpec = concurrentUsersForRC > ROCKETCHAT_SCALE_SPECS.userThreshold;
     const rcCpu = useHighSpec ? ROCKETCHAT_SCALE_SPECS.large.cpu : ROCKETCHAT_SCALE_SPECS.standard.cpu;
     const rcRam = useHighSpec ? ROCKETCHAT_SCALE_SPECS.large.ram : ROCKETCHAT_SCALE_SPECS.standard.ram;
@@ -500,7 +532,7 @@ export const calculateInfra = (data: AppFormData): CalculationResult => {
 
   // Rule 5: HA duplication — PROD always, UAT only if concurrent users > 100, DEV never
   if (data.haEnabled) {
-    const concurrentUsers = Math.ceil(crmActiveUsers);
+    const concurrentUsers = Math.ceil(crmConcurrentUsers);
     if (isProd || (isUat && concurrentUsers > 100)) {
       finalServers = applyHALayer(finalServers);
     }
@@ -508,6 +540,26 @@ export const calculateInfra = (data: AppFormData): CalculationResult => {
 
   // Rule 5: DR — column-only indicator (no server duplication)
   // DR is shown as a 'Yes' column on PROD sheets only; UAT/DEV have no DR.
+
+  // Determine server priority for sorted export
+  const getSortPriority = (srv: ServerSpec) => {
+    const nm = srv.name.toLowerCase();
+    const id = srv.id.toLowerCase();
+    if (nm.includes('forward') || id.includes('forward')) return 1;
+    if (nm.includes('marketing') || id.includes('mkt')) return 2;
+    if (nm.includes('haproxy') || nm.includes('ha proxy') || id.includes('haproxy')) return 3;
+    if (nm.includes('presentation') || id.includes('presentation')) return 4;
+    return 999;
+  };
+
+  // Stably sort servers based on priority
+  finalServers = finalServers
+    .map((srv, index) => ({ srv, index, priority: getSortPriority(srv) }))
+    .sort((a, b) => {
+      if (a.priority !== b.priority) return a.priority - b.priority;
+      return a.index - b.index; // Fallback to original relative order
+    })
+    .map(item => item.srv);
 
   // Assign global sequential node numbers
   finalServers = finalServers.map((server, idx) => ({
@@ -521,15 +573,22 @@ export const calculateInfra = (data: AppFormData): CalculationResult => {
     solutionType: data.solutionType,
     servers: finalServers,
     crmMetrics: {
-      triggersPerSecond: Number(crmTriggersPerSec.toFixed(2)),
-      activeLoadUsers: Math.ceil(crmActiveUsers)
+      triggersPerSecond: Number(crmTriggersPerSecond.toFixed(2)),
+      concurrentUsers: Number(crmConcurrentUsers.toFixed(2)),
+      activeLoadPerSecond: Number(crmActiveLoadPerSecond.toFixed(2)),
+      activeLoadUsers: Math.ceil(crmConcurrentUsers)
     },
     marketingMetrics: {
-      triggersPerSecond: Number(mktTriggersPerSec.toFixed(2)),
-      activeLoadUsers: Math.ceil(mktActiveUsers)
+      triggersPerSecond: Number(mktTriggersPerSecond.toFixed(2)),
+      concurrentUsers: Number(mktConcurrentUsers.toFixed(2)),
+      activeLoadPerSecond: Number(mktActiveLoadPerSecond.toFixed(2)),
+      activeLoadUsers: Math.ceil(mktConcurrentUsers)
     },
     botMetrics: {
-      requestsPerMinute: botRPM,
+      requestsPerSecond: Number(botRequestsPerSecond.toFixed(2)),
+      activeLoadPerSecond: Number(botActiveLoadPerSecond.toFixed(2)),
+      requestsPerMinute: Number(botRPM.toFixed(2)),
+      concurrentUsers: Number(botConcurrentUsers.toFixed(2)),
       tpm: tpm
     },
     ryaBotCloudCost,

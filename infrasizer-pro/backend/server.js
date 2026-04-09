@@ -74,9 +74,20 @@ app.post('/api/config', (req, res) => {
     if (!data || typeof data !== 'object') {
       return res.status(400).json({ error: 'Request body must be a JSON object.' });
     }
-    if (!Array.isArray(data.software) || !Array.isArray(data.browsers)) {
+    if (!Array.isArray(data.browsers)) {
       return res.status(400).json({
-        error: 'Payload must contain "software" (array) and "browsers" (array).',
+        error: 'Payload must contain "browsers" (array).',
+      });
+    }
+
+    // Legacy and new schema compatibility:
+    // - Legacy: software + browsers
+    // - New: productStacks + browsers (+ optional software alias)
+    const hasLegacySoftware = Array.isArray(data.software);
+    const hasProductStacks = data.productStacks && typeof data.productStacks === 'object';
+    if (!hasLegacySoftware && !hasProductStacks) {
+      return res.status(400).json({
+        error: 'Payload must contain either "software" array (legacy) or "productStacks" object.',
       });
     }
 

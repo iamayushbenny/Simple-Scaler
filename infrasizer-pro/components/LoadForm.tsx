@@ -2,6 +2,7 @@
 import React from 'react';
 import { UseFormRegister, FieldErrors, UseFormWatch } from 'react-hook-form';
 import { AppFormData } from '../types';
+import { calculateLoadMetrics } from '../services/CalculatorEngine';
 import { User, Cpu, MessageSquare, Database, Megaphone } from 'lucide-react';
 
 interface LoadFormProps {
@@ -23,11 +24,10 @@ const LoadForm: React.FC<LoadFormProps> = ({ register, errors, watch }) => {
   const clickhouseEnabled = watch('solutions.clickhouse');
 
   // Live Auto-calcs for UI
-  const crmActive = Math.ceil((watchCRM.namedUsers * watchCRM.concurrencyRate) / 100);
-  const triggersSec = ((crmActive * watchCRM.triggersPerMinute) / 60).toFixed(2);
-  const mktActive = Math.ceil((watchMarketing.namedUsers * watchMarketing.concurrencyRate) / 100);
-  const mktTriggersSec = ((mktActive * watchMarketing.triggersPerMinute) / 60).toFixed(2);
-  const tpm = watchBot.activeUsers * watchBot.requestsPerMinute * watchBot.avgTokensPerRequest;
+  const crmLoad = calculateLoadMetrics(watchCRM.namedUsers || 0, watchCRM.concurrencyRate || 0, watchCRM.triggersPerMinute || 0);
+  const mktLoad = calculateLoadMetrics(watchMarketing.namedUsers || 0, watchMarketing.concurrencyRate || 0, watchMarketing.triggersPerMinute || 0);
+  const botRPM = (watchBot.activeUsers || 0) * (watchBot.requestsPerMinute || 0);
+  const tpm = botRPM * (watchBot.avgTokensPerRequest || 0);
 
   return (
     <div className="space-y-5 animate-in fade-in slide-in-from-left duration-500">
@@ -75,12 +75,12 @@ const LoadForm: React.FC<LoadFormProps> = ({ register, errors, watch }) => {
 
         <div className="mt-4 p-3 bg-slate-50 rounded-lg grid grid-cols-2 gap-3 border border-slate-100">
           <div>
-            <p className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Active Load Users</p>
-            <p className="text-xl font-bold text-blue-600">{crmActive || 0}</p>
+            <p className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Active Load/Sec</p>
+            <p className="text-xl font-bold text-blue-600">{crmLoad.activeLoadPerSecond.toFixed(2)}</p>
           </div>
           <div>
             <p className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Triggers/Second</p>
-            <p className="text-xl font-bold text-indigo-600">{triggersSec || '0.00'}</p>
+            <p className="text-xl font-bold text-indigo-600">{crmLoad.perSecondRate.toFixed(2)}</p>
           </div>
         </div>
       </section>
@@ -98,7 +98,12 @@ const LoadForm: React.FC<LoadFormProps> = ({ register, errors, watch }) => {
         
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="space-y-1">
-            <label className="text-xs font-medium text-slate-700">Named Users</label>
+            <label className="text-xs font-medium text-slate-700 flex items-center gap-1.5">
+              <span>Named Users</span>
+              <span className="text-[10px] font-semibold text-orange-600 bg-orange-50 border border-orange-200 rounded px-1.5 py-0.5">
+                (5-10% of CRM named users)
+              </span>
+            </label>
             <input
               type="number"
               {...register('marketing.namedUsers', { valueAsNumber: true })}
@@ -130,12 +135,12 @@ const LoadForm: React.FC<LoadFormProps> = ({ register, errors, watch }) => {
 
         <div className="mt-4 p-3 bg-slate-50 rounded-lg grid grid-cols-2 gap-3 border border-slate-100">
           <div>
-            <p className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Active Load Users</p>
-            <p className="text-xl font-bold text-orange-600">{mktActive || 0}</p>
+            <p className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Active Load/Sec</p>
+            <p className="text-xl font-bold text-orange-600">{mktLoad.activeLoadPerSecond.toFixed(2)}</p>
           </div>
           <div>
             <p className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Triggers/Second</p>
-            <p className="text-xl font-bold text-amber-600">{mktTriggersSec || '0.00'}</p>
+            <p className="text-xl font-bold text-amber-600">{mktLoad.perSecondRate.toFixed(2)}</p>
           </div>
         </div>
       </section>
@@ -197,9 +202,15 @@ const LoadForm: React.FC<LoadFormProps> = ({ register, errors, watch }) => {
           )}
         </div>
 
-        <div className="mt-4 p-3 bg-slate-50 rounded-lg border border-slate-100">
-          <p className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Projected Tokens Per Minute (TPM)</p>
-          <p className="text-xl font-bold text-purple-600">{tpm.toLocaleString()}</p>
+        <div className="mt-4 p-3 bg-slate-50 rounded-lg border border-slate-100 grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div>
+            <p className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Concurrent Requests/Min</p>
+            <p className="text-xl font-bold text-purple-600">{botRPM.toLocaleString()}</p>
+          </div>
+          <div>
+            <p className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Projected TPM</p>
+            <p className="text-xl font-bold text-violet-600">{tpm.toLocaleString()}</p>
+          </div>
         </div>
       </section>
       )}

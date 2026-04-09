@@ -120,7 +120,9 @@ export function resetConfig(): void {
  */
 export async function initRemotePlatformConfig(): Promise<void> {
   const remote = await fetchJSON<PlatformRecommendations>(`${API_BASE}/api/config`);
-  if (remote && typeof remote === 'object' && Array.isArray(remote.software)) {
+  const hasLegacySoftware = !!(remote && Array.isArray(remote.software));
+  const hasStackConfig = !!(remote && remote.productStacks && typeof remote.productStacks === 'object');
+  if (remote && typeof remote === 'object' && (hasLegacySoftware || hasStackConfig)) {
     _platformConfigCache = remote;
     try {
       localStorage.setItem(PLATFORM_STORAGE_KEY, JSON.stringify(remote));

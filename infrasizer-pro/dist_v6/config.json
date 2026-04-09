@@ -1,0 +1,29 @@
+{
+  "envMultipliers": {
+    "DEV": 0.8,
+    "UAT": 1.0,
+    "PROD": 1.5
+  },
+  "crmThresholds": {
+    "lowToMedium": { "triggersPerSec": 5, "namedUsers": 200 },
+    "mediumToHigh": { "triggersPerSec": 20, "namedUsers": 1000 }
+  },
+  "crmSpecs": {
+    "low": { "cpu": 2, "ram": 8, "hdd": 200 },
+    "medium": { "cpu": 4, "ram": 16, "hdd": 300 },
+    "high": { "cpu": 8, "ram": 32, "hdd": 500 }
+  },
+  "botThresholds": {
+    "lowToMedium": 5000,
+    "mediumToHigh": 20000
+  },
+  "botSpecs": {
+    "low": { "cpu": 4, "ram": 12, "hdd": 100 },
+    "medium": { "cpu": 6, "ram": 16, "hdd": 100 },
+    "high": { "cpu": 8, "ram": 32, "hdd": 100 }
+  },
+  "talendServer": { "cpu": 4, "ram": 16, "hdd": 200 },
+  "marketingServer": { "cpu": 4, "ram": 12, "hdd": 80 },
+  "clickhouseServer": { "cpu": 4, "ram": 12, "baseHdd": 80, "storageMultiplier": 1.5 },
+  "metabaseServer": { "cpu": 4, "ram": 8, "hdd": 80 }
+}

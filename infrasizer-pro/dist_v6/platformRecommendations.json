@@ -1,0 +1,58 @@
+{
+  "software": [
+    {
+      "software": "Linux (OS)",
+      "supportedVersion": "RHEL 9 x86_64bit",
+      "componentHosted": "CRM, GenAI, Metabase and Clickhouse",
+      "comments": ""
+    },
+    {
+      "software": "Windows (OS)",
+      "supportedVersion": "Windows Server 2016+",
+      "componentHosted": "Talend",
+      "comments": ""
+    },
+    {
+      "software": "Apache",
+      "supportedVersion": "2.4",
+      "componentHosted": "Application Stack",
+      "comments": ""
+    },
+    {
+      "software": "PHP",
+      "supportedVersion": "8.4",
+      "componentHosted": "Application Stack",
+      "comments": ""
+    },
+    {
+      "software": "MySQL",
+      "supportedVersion": "8.4",
+      "componentHosted": "Database Stack",
+      "comments": ""
+    },
+    {
+      "software": "MSSQL",
+      "supportedVersion": "2016+",
+      "componentHosted": "Database Stack",
+      "comments": ""
+    },
+    {
+      "software": "Oracle Database",
+      "supportedVersion": "21+",
+      "componentHosted": "Database Stack",
+      "comments": ""
+    },
+    {
+      "software": "HAProxy",
+      "supportedVersion": "2.6",
+      "componentHosted": "Software Load Balancer",
+      "comments": "Flexible to use hardware load balancer if client has and already using it"
+    }
+  ],
+  "browsers": [
+    { "browser": "Chrome", "supportedVersion": "version 109 and above" },
+    { "browser": "Firefox", "supportedVersion": "version 109 and above" },
+    { "browser": "Edge", "supportedVersion": "version 109 and above" },
+    { "browser": "Safari", "supportedVersion": "version 16 and above" }
+  ]
+}

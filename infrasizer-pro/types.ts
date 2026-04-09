@@ -85,14 +85,21 @@ export interface CalculationResult {
   servers: ServerSpec[];
   crmMetrics: {
     triggersPerSecond: number;
+    concurrentUsers: number;
+    activeLoadPerSecond: number;
     activeLoadUsers: number;
   };
   marketingMetrics: {
     triggersPerSecond: number;
+    concurrentUsers: number;
+    activeLoadPerSecond: number;
     activeLoadUsers: number;
   };
   botMetrics: {
+    requestsPerSecond: number;
+    activeLoadPerSecond: number;
     requestsPerMinute: number;
+    concurrentUsers: number;
     tpm: number;
   };
   // --- NEW: Cloud cost for RyaBot when on-cloud ---

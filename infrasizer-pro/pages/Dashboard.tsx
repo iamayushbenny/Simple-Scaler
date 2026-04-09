@@ -217,7 +217,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onAdminClick }) => {
                   title="Download PDF"
                 >
                   <Download className="w-5 h-5" />
-                  <span className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-[10px] py-1 px-2 rounded opacity-0 group-hover:opacity-100 transition-opacity">PDF</span>
+                  <span className="pointer-events-none absolute top-full mt-2 left-1/2 -translate-x-1/2 bg-slate-900 text-white text-[10px] py-1 px-2 rounded-md opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50 shadow-lg">Download PDF</span>
                 </button>
 
                 <button 
@@ -227,7 +227,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onAdminClick }) => {
                   disabled={!lastFormData}
                 >
                   <FileSpreadsheet className="w-5 h-5" />
-                  <span className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-[10px] py-1 px-2 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">Excel Report</span>
+                  <span className="pointer-events-none absolute top-full mt-2 left-1/2 -translate-x-1/2 bg-slate-900 text-white text-[10px] py-1 px-2 rounded-md opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50 shadow-lg">Excel Report</span>
                 </button>
                 <div className="w-px h-6 bg-slate-200 mx-2 self-center"></div>
                 <button 

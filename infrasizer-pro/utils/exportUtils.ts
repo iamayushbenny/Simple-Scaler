@@ -49,7 +49,9 @@ export const exportToPDF = (result: CalculationResult) => {
   const metricData = [
     ['Metric', 'Calculated Value'],
     ['CRM Triggers/sec', result.crmMetrics.triggersPerSecond.toString()],
-    ['CRM Active Users', result.crmMetrics.activeLoadUsers.toString()],
+    ['CRM Concurrent Users', result.crmMetrics.concurrentUsers.toString()],
+    ['CRM Active Load/sec', result.crmMetrics.activeLoadPerSecond.toString()],
+    ['Bot Concurrent Users', result.botMetrics.concurrentUsers.toString()],
     ['Bot Requests/min', result.botMetrics.requestsPerMinute.toString()],
     ['Tokens Per Minute (TPM)', result.botMetrics.tpm.toLocaleString()],
   ];
